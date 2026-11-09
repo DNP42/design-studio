@@ -65,42 +65,36 @@
   .light .btn { --fg: var(--light-fg); --swarm-color: #3a5bff; }
 
   .term {
-    --term-fg: #8af7a0; --term-dim: #4f8a5e; --term-line: #2c4a35; --term-bg: #04070bf0;
+    --accent: #ffd36e;
     position: fixed; z-index: 10000; left: 16px; bottom: 16px;
-    width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+    width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
     display: flex; flex-direction: column; cursor: auto;               /* settings keep a normal pointer */
-    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--term-fg);
-    background: var(--term-bg); border: 1px solid var(--term-line); border-radius: 8px;
-    box-shadow: 0 10px 40px #0009; backdrop-filter: blur(6px);
+    font-size: 13px; color: var(--fg);
+    background: #0d1118e6; border: 1px solid var(--line); border-radius: 18px;
+    box-shadow: 0 12px 40px #0008; backdrop-filter: blur(10px);
   }
   .term-bar {
-    display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--term-line);
+    display: flex; justify-content: center; padding: 8px 0 2px;
     cursor: grab; user-select: none; touch-action: none;
   }
   .term-bar:active { cursor: grabbing; }
-  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
-  .term-bar i:nth-child(2) { background: #febc2e; }
-  .term-bar i:nth-child(3) { background: #28c840; }
-  .term-bar span { margin-left: 8px; color: var(--term-dim); }
-  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 10px 12px; }
-  .controls::before { content: '$'; color: var(--term-dim); }
+  .term-bar::before { content: ''; width: 36px; height: 4px; border-radius: 2px; background: var(--line); }
+  .term-bar:hover::before { background: #ffffff55; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px 10px; }
   .controls button, .controls select {
-    font: inherit; color: var(--term-fg); background: transparent;
-    border: 1px solid transparent; border-radius: 3px; padding: 3px 5px; cursor: pointer;
+    font: 500 13px/1 inherit; font-family: inherit; color: var(--fg); background: transparent;
+    border: 0; border-radius: 999px; padding: 8px 13px; cursor: pointer;
   }
-  .controls button::before { content: '['; color: var(--term-dim); }
-  .controls button::after { content: ']'; color: var(--term-dim); }
-  .controls button[aria-pressed="true"] { background: var(--term-fg); color: #04070b; }
-  .controls button[aria-pressed="true"]::before, .controls button[aria-pressed="true"]::after { color: inherit; }
-  .controls select { border-color: var(--term-line); }
-  .controls select option { background: #04070b; }
-  .controls input[type=color] { width: 26px; height: 20px; padding: 0; border: 1px solid var(--term-line); border-radius: 3px; background: transparent; cursor: pointer; }
-  .tune { flex: 1; min-height: 0; overflow: auto; padding: 4px 12px 10px; border-top: 1px dashed var(--term-line); touch-action: pan-y; }
+  .controls button:hover, .controls select:hover { background: #ffffff12; }
+  .controls button[aria-pressed="true"] { background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--accent); }
+  .controls select { background: #ffffff0f; }
+  .controls select option { background: #0d1118; }
+  .controls input[type=color] { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+  .tune { flex: 1; min-height: 0; overflow: auto; padding: 6px 16px 14px; border-top: 1px solid var(--line); touch-action: pan-y; }
   .tune[hidden] { display: none; }
-  .tune label { display: grid; grid-template-columns: 9.5em 1fr 3.5em; align-items: center; gap: 8px; padding: 3px 0; }
-  .tune label span::before { content: '> '; color: var(--term-dim); }
-  .tune output { text-align: right; color: var(--term-dim); font-variant-numeric: tabular-nums; }
-  .tune input[type=range] { width: 100%; min-width: 0; accent-color: var(--term-fg); }
+  .tune label { display: grid; grid-template-columns: 7.5em 1fr 3.5em; align-items: center; gap: 8px; padding: 5px 0; }
+  .tune output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tune input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -132,22 +126,22 @@
   </section>
 
   <div class="term" id="term" role="group" aria-label="Swarm settings">
-    <div class="term-bar" title="Drag to move"><i></i><i></i><i></i><span>swarm@dnp: ~/tune</span></div>
+    <div class="term-bar" title="Drag to move" aria-hidden="true"></div>
     <div class="controls">
-      <button type="button" data-mode="glow" aria-pressed="true">glow</button>
-      <button type="button" data-mode="contrast" aria-pressed="false">contrast</button>
+      <button type="button" data-mode="glow" aria-pressed="true">Glow</button>
+      <button type="button" data-mode="contrast" aria-pressed="false">Contrast</button>
       <select aria-label="Particle count">
         <option value="300">300</option>
         <option value="700" selected>700</option>
         <option value="1200">1200</option>
       </select>
       <select aria-label="Text path">
-        <option value="border" selected>border</option>
-        <option value="offset">offset</option>
-        <option value="shadow">shadow</option>
+        <option value="border" selected>Border</option>
+        <option value="offset">Offset</option>
+        <option value="shadow">Shadow</option>
       </select>
       <input type="color" value="#ffd36e" aria-label="Swarm colour">
-      <button type="button" id="tune-btn" aria-expanded="false" aria-controls="tune">tune</button>
+      <button type="button" id="tune-btn" aria-expanded="false" aria-controls="tune">Tune</button>
     </div>
     <div class="tune" id="tune" role="group" aria-label="Tune the swarm" hidden></div>
   </div>
@@ -163,7 +157,10 @@
     const countSel = document.querySelector('.controls select');
     countSel.addEventListener('change', e => { swarm.setCount(+e.target.value); sliders.count.sync(+e.target.value); });
     document.querySelector('[aria-label="Text path"]').addEventListener('change', e => swarm.setPath(e.target.value));
-    document.querySelector('.controls input[type=color]').addEventListener('input', e => swarm.setColor(e.target.value));
+    document.querySelector('.controls input[type=color]').addEventListener('input', e => {
+      swarm.setColor(e.target.value);
+      document.getElementById('term').style.setProperty('--accent', e.target.value);
+    });
 
     // Tune panel: [option, label, min, max, step]. Defaults come from the swarm itself.
     const TUNE = [
