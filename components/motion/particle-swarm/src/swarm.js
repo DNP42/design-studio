@@ -11,8 +11,12 @@
  * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
  *   data-swarm-path="offset"  text path style: border (on the outline) | offset (pushed out 5px) | shadow (shifted down-right)
  *   data-swarm-prose      running text (descriptions, info): the swarm avoids it, lights it, goes behind it or over it
+ *   data-swarm-info="text"  rest the cursor on the element: the swarm draws a circled 'i' above it and the text shows below it
+ *                           (a tooltip, linked with aria-describedby; keyboard focus shows it too)
+ *   data-swarm-danger     a danger action: the swarm draws a circled X in dangerColor (red) instead of the 'i'
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
  * Live tuning: swarm.set({ spacing, size, orbit, stiffness, scouts, field, pathSpeed, curve, glow, count, ... }).
+ * CSS: style .swarm-tip (and .swarm-tip.is-danger) for the info text; .is-on is set while it shows.
  * CSS on the element:
  *   --swarm-color         swarm tint while it holds this element
  *   --swarm               written by the script, 0..1, use it in your own CSS
@@ -45,7 +49,10 @@
       textPath: 'border',    // text path style: 'border' | 'offset' | 'shadow'; per element: data-swarm-path
       prose: 'avoid',        // running text [data-swarm-prose]: 'avoid' | 'highlight' (spotlight, styled by the page) | 'behind' | 'over'
       proseGap: 10,          // px the swarm keeps clear of running text in 'avoid'
-      burst: true,           // a click on a border target breaks its label into particles (page CSS: .is-burst)
+      burst: true,
+      info: true,            // [data-swarm-info] / [data-swarm-danger]: after infoDelay on the element, the swarm draws the icon
+      infoDelay: 0.6,        // s the cursor rests on the element before the icon forms
+      dangerColor: '#ff4d4d',           // a click on a border target breaks its label into particles (page CSS: .is-burst)
       reducedMotion: 'calm', // with prefers-reduced-motion: 'calm' (30% count, no drift, no lean) | 'off'
     }, opts || {});
 
@@ -60,6 +67,12 @@
       pointerEvents: 'none', zIndex: '9999',
     });
     document.body.appendChild(cvs);
+    // Tooltip base: hidden until .is-on. Put first in <head>, so the page CSS wins.
+    const tipCss = document.createElement('style');
+    tipCss.textContent = `.swarm-tip{position:fixed;left:0;top:0;z-index:${+cvs.style.zIndex + 1};pointer-events:none;transform:translateX(-50%);` +
+      `visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}.swarm-tip.is-on{visibility:visible;opacity:1}`;
+    document.head.prepend(tipCss);
+    let tipId = 0, danger = null, dangerSrc = null;
     const ctx = cvs.getContext('2d');
 
     const probe = document.createElement('canvas').getContext('2d');
@@ -293,12 +306,27 @@
       next: [icon('next')], prev: [icon('prev')], stop: [icon('stop')],
     };
 
+    // Info icons, s = ring radius: an 'i' (dot and stem) or a danger X.
+    const INFO = {
+      info: s => [ring(0, -0.42 * s, 0.1 * s, 20), rect(-0.08 * s, -0.18 * s, 0.08 * s, 0.52 * s)],
+      danger: s => [line(-0.42 * s, -0.42 * s, 0.42 * s, 0.42 * s), line(0.42 * s, -0.42 * s, -0.42 * s, 0.42 * s)],
+    };
+    function buildInfo(e) {                                 // centred above the element, 10px clear of it
+      const r = baseRect(e), q = Math.max(14, Math.min(r.height * 0.55, 26));
+      e.ishape = outlines([ring(0, 0, q, 96), ...INFO[e.danger ? 'danger' : 'info'](q)], r.width / 2, -q - 10);
+    }
+
     function buildShape(e) {
       const r = baseRect(e), make = SHAPES[e.shape];
       e.pts = null;
       if (!make || !r.width || !r.height) return;
+      Object.assign(e, outlines(make[e.design % make.length](r.width, r.height), r.width / 2, r.height / 2));
+    }
+
+    // Loops around (0, 0) to resampled outlines with normals, moved to (ox, oy) in element space.
+    function outlines(loops, ox, oy) {
       const pts = [], nrm = [], starts = [], lens = [];
-      for (const lp of make[e.design % make.length](r.width, r.height)) {
+      for (const lp of loops) {
         const back = [];
         if (!lp.closed) for (let i = lp.p.length - 4; i >= 2; i -= 2) back.push(lp.p[i], lp.p[i + 1]);
         const loop = lp.p.concat(back);
@@ -306,17 +334,18 @@
         for (let i = 0; i < loop.length; i += 2) {
           const j = (i + 2) % loop.length;
           area += loop[i] * loop[j + 1] - loop[j] * loop[i + 1];
-          loop[i] += r.width / 2; loop[i + 1] += r.height / 2;
+          loop[i] += ox; loop[i + 1] += oy;
         }
         const M = resample(loop, pts, starts, lens, 0);
         if (M) normals(pts, starts[starts.length - 1], M, nrm, () => area < 0);       // outward for a clockwise loop
       }
-      Object.assign(e, pts.length ? { pts: Float32Array.from(pts), nrm: Float32Array.from(nrm), starts, lens, total: pts.length / 2 } : { pts: null });
+      return pts.length ? { pts: Float32Array.from(pts), nrm: Float32Array.from(nrm), starts, lens, total: pts.length / 2 } : { pts: null };
     }
 
     function sample(e) {
       if (e.kind === 'text') sampleText(e);
       else if (e.kind === 'shape') buildShape(e);
+      if (e.info != null || e.danger) buildInfo(e);
     }
 
     // A point on the outlines. p0 in [0,total) picks the loop and the start; adv moves along that loop.
@@ -341,6 +370,7 @@
           magnet: calm || isNaN(m) ? o.magnet : m,
           path: el.dataset.swarmPath || o.textPath,
           rgb: toRGB(cs.getPropertyValue('--swarm-color').trim() || o.color),
+          info: el.dataset.swarmInfo, danger: el.hasAttribute('data-swarm-danger'), ishape: null, tip: null, focus: false, dw: 0, tipOn: false,
           k: 0, tx: 0, ty: 0, pts: null, rad: 0, r: 0, scout: false, cT: '', cS: null, cOn: false,
         };
       });
@@ -365,6 +395,41 @@
         e.el.addEventListener('click', next);
         e.off = () => e.el.removeEventListener('click', next);
       });
+      els.forEach(setupInfo);
+    }
+
+    // The info text is a real element: screen readers get it through aria-describedby, keyboard focus shows it.
+    function setupInfo(e) {
+      if (e.info == null && !e.danger) return;
+      const el = e.el, had = el.getAttribute('aria-describedby');
+      if (e.info) {
+        const tip = e.tip = document.createElement('div');
+        tip.className = 'swarm-tip' + (e.danger ? ' is-danger' : '');
+        tip.id = 'swarm-tip-' + (++tipId);
+        tip.setAttribute('role', 'tooltip');
+        tip.textContent = e.info;
+        document.body.appendChild(tip);
+        el.setAttribute('aria-describedby', (had ? had + ' ' : '') + tip.id);
+      }
+      // Without the swarm (reducedMotion 'off') hover shows the text at once.
+      const show = on => { if (!off || !e.tip) return; placeTip(e, el.getBoundingClientRect()); e.tip.classList.toggle('is-on', on); };
+      const onFocus = () => { e.focus = el.matches(':focus-visible'); show(e.focus); };
+      const onBlur = () => { e.focus = false; show(false); };
+      const onEnter = () => show(true), onLeave = () => show(e.focus);
+      el.addEventListener('focus', onFocus); el.addEventListener('blur', onBlur);
+      el.addEventListener('pointerenter', onEnter); el.addEventListener('pointerleave', onLeave);
+      const prev = e.off;
+      e.off = () => {
+        if (prev) prev();
+        el.removeEventListener('focus', onFocus); el.removeEventListener('blur', onBlur);
+        el.removeEventListener('pointerenter', onEnter); el.removeEventListener('pointerleave', onLeave);
+        if (e.tip) { e.tip.remove(); if (had) el.setAttribute('aria-describedby', had); else el.removeAttribute('aria-describedby'); }
+      };
+    }
+    function placeTip(e, b) {                               // centred below the element
+      const l = Math.round(b.x + b.width / 2) + 'px', tp = Math.round(b.y + b.height + 12) + 'px';
+      if (l !== e.cL) e.tip.style.left = e.cL = l;
+      if (tp !== e.cTp) e.tip.style.top = e.cTp = tp;
     }
 
     function readRadius(e) { e.rad = parseFloat(getComputedStyle(e.el).borderTopLeftRadius) || 0; }
@@ -428,6 +493,8 @@
         const bo = e.box = { x: r.left + e.tx, y: r.top + e.ty, w: r.width, h: r.height };
         e.r = Math.min(e.rad, bo.w / 2, bo.h / 2);
         // A scout visits only a near, calm element that is on screen, so it never leaves the canvas.
+        // Info: the cursor rests on the element for infoDelay seconds, or keyboard focus is on it.
+        if (e.ishape) { e.dw = e.k > 0.85 && has ? e.dw + dt / 60 : 0; e.tipOn = o.info && (e.dw > o.infoDelay || e.focus); }
         e.scout = !e.quiet && e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
         if (e.k > best) { best = e.k; act = e; }
       }
@@ -454,6 +521,10 @@
         if (e.wT !== e.cT) e.el.style.translate = e.cT = e.wT;
         if (e.wS !== e.cS) e.el.style.setProperty('--swarm', e.cS = e.wS);
         if (e.wOn !== e.cOn) e.el.classList.toggle('is-swarmed', e.cOn = e.wOn);
+        if (e.tip) {
+          if (e.tipOn) placeTip(e, { x: e.box.x, y: e.box.y, width: e.box.w, height: e.box.h });
+          if (e.tipOn !== e.cTip) e.tip.classList.toggle('is-on', e.cTip = e.tipOn);
+        }
       }
 
       // The pool holds twice the count; focus brings the second half out of the hive centre.
@@ -465,7 +536,8 @@
       // Angular speed drifts through zero, so the hive turns, eases and turns back.
       spin += (1.1 * Math.sin(t * 0.37) + 0.5 * Math.sin(t * 0.91 + 1.7)) * o.orbit * dt / 60;
 
-      const tc = act ? act.rgb : base;
+      if (o.dangerColor !== dangerSrc) danger = toRGB(dangerSrc = o.dangerColor);
+      const tc = act ? (act.tipOn && act.danger ? danger : act.rgb) : base;
       for (let c = 0; c < 3; c++) col[c] += (base[c] + (tc[c] - base[c]) * best - col[c]) * Math.min(1, 0.1 * dt);
 
       // The share of the swarm on the element grows with closeness: about N*share particles leave the hive
@@ -478,7 +550,9 @@
         rad = act.r;
         plen = Math.max(1, 2 * (bw + bh) - 8 * rad + TAU * rad);
       }
-      const pts = act && act.kind !== 'border' ? act.pts : null;
+      // The path set: the info icon while it shows, else the glyph or shape outlines, else (null) the border.
+      const sh = act && act.tipOn && act.ishape.pts ? act.ishape : act && act.kind !== 'border' && act.pts ? act : null;
+      const pts = sh ? sh.pts : null;
       const damp = Math.pow(0.8, dt);
       const every = o.scouts > 0 ? Math.max(1, Math.round(1 / o.scouts)) : 0;
       const sz = o.size, gl = o.glow, pathAdv = t * o.pathSpeed;
@@ -502,8 +576,8 @@
         if (act && Q[i] < share) {  // on the path: spring fully onto it, no blend
           let ex, ey;
           if (pts) {                                        // travel a glyph contour at a constant tangent speed
-            onOutline(act, U[i] * act.total, pathAdv, tmp);
-            const [sx, sy, lift] = TEXT_PATHS[act.kind === 'text' ? act.path : 'border'] || TEXT_PATHS.border;
+            onOutline(sh, U[i] * sh.total, pathAdv, tmp);
+            const [sx, sy, lift] = TEXT_PATHS[sh === act && act.kind === 'text' ? act.path : 'border'] || TEXT_PATHS.border;
             ex = bx + tmp[0] + tmp[2] * lift + sx + (R[i] - 0.5) * 1.5;
             ey = by + tmp[1] + tmp[3] * lift + sy + (Q[i] - 0.5) * 1.5;
           } else {                                          // travel the border at a constant tangent speed
@@ -684,6 +758,7 @@
         prose.forEach(clearProse);
         ['avoid', 'highlight', 'behind', 'over'].forEach(m => document.documentElement.classList.remove('swarm-prose-' + m));
         cvs.remove();
+        tipCss.remove();
       },
     };
   }

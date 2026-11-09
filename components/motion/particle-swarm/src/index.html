@@ -98,10 +98,24 @@
   }
   .btn.music.big { width: 76px; height: 76px; font-size: 24px; }
 
+  /* Info text: the swarm draws a circled 'i' (or a red X for danger) above the button; this box shows below it. */
+  .swarm-tip {
+    max-width: min(280px, calc(100vw - 32px)); padding: 8px 12px; border-radius: 10px;
+    background: #0d1118f2; color: #e8edf5; border: 1px solid #ffffff1f; box-shadow: 0 6px 24px #0006;
+    font: 500 13px/1.45 system-ui, sans-serif; text-align: center;
+  }
+  .swarm-tip.is-danger { border-color: #ff4d4d99; color: #ffd9d9; }
+  .danger-zone { position: relative; padding: 64px 32px 24px; border: 1px dashed #ff4d4d88; border-radius: 14px; }
+  .dz-title {
+    position: absolute; top: -0.75em; left: 16px; margin: 0; padding: 0 8px; background: var(--light-bg);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #c92a2a;
+  }
+
   .light { background: var(--light-bg); color: var(--light-fg); }
   .light .title { --fg: var(--light-fg); --swarm-color: #3a5bff; font-size: clamp(48px, 11vw, 140px); }
   .light .lede { --rest: #5a606b; --fg: var(--light-fg); --swarm-color: #3a5bff; }
   .light .btn { --fg: var(--light-fg); --swarm-color: #3a5bff; }
+  .light .btn.danger { --fg: #c92a2a; --swarm-color: #ff4d4d; }
 
   .term {
     --accent: #ffd36e;
@@ -152,13 +166,13 @@
     <p class="logo" data-swarm="text" data-swarm-magnet="0" data-swarm-scout="off">DNP</p>
     <p class="lede" data-swarm-prose>Move the cursor. The swarm follows it. Go near the word or a button: the closer you get, the more of the swarm leaves the hive and runs along the letter outlines or the button border.</p>
     <div class="row">
-      <button class="btn" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Get started</span></button>
-      <button class="btn alt" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Read more</span></button>
+      <button class="btn" data-swarm="border" data-swarm-magnet="0.22" data-swarm-info="Create a free account. It takes one minute."><span class="lbl">Get started</span></button>
+      <button class="btn alt" data-swarm="border" data-swarm-magnet="0.22" data-swarm-info="Open the full guide in this tab."><span class="lbl">Read more</span></button>
     </div>
     <div class="row types">
       <button class="btn sharp" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Sharp</span></button>
       <button class="btn round" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Rounded</span></button>
-      <button class="btn icon" data-swarm="border" data-swarm-magnet="0.3" aria-label="Add"><span class="lbl">+</span></button>
+      <button class="btn icon" data-swarm="border" data-swarm-magnet="0.3" aria-label="Add" data-swarm-info="Add a new item to the list."><span class="lbl">+</span></button>
       <button class="btn link" data-swarm="border" data-swarm-magnet="0.15"><span class="lbl">Text link</span></button>
       <button class="btn cta" data-swarm="border" data-swarm-magnet="0.18"><span class="lbl">Start now</span></button>
     </div>
@@ -173,9 +187,14 @@
 
   <section class="light">
     <h2 class="title" data-swarm="text" data-swarm-magnet="0.04">Contrast</h2>
-    <p class="lede" data-swarm-prose>Switch to Contrast mode. The swarm inverts every pixel it crosses, dark or light.</p>
+    <p class="lede" data-swarm-prose>Rest the cursor on a button: the swarm draws an info sign and the button tells what it does. A danger action gets a red X. Tab to a button to read it with the keyboard. Switch to Contrast mode. The swarm inverts every pixel it crosses, dark or light.</p>
     <div class="row">
-      <button class="btn" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Subscribe</span></button>
+      <button class="btn" data-swarm="border" data-swarm-magnet="0.22" data-swarm-info="One email a month. Unsubscribe at any time."><span class="lbl">Subscribe</span></button>
+    </div>
+    <div class="danger-zone" role="group" aria-labelledby="dz">
+      <p class="dz-title" id="dz">Danger zone</p>
+      <button class="btn danger" data-swarm="border" data-swarm-danger data-swarm-magnet="0.1"
+        data-swarm-info="Delete your account and all its data. You cannot undo this."><span class="lbl">Delete account</span></button>
     </div>
   </section>
 
@@ -239,7 +258,7 @@
       ['count', 'Count', 100, 2000, 50], ['spacing', 'Hive radius', 8, 80, 1], ['size', 'Size', 0.3, 3, 0.1],
       ['orbit', 'Orbit speed', 0, 4, 0.1], ['stiffness', 'Stiffness', 0.2, 3, 0.1], ['scouts', 'Scout ratio', 0, 0.5, 0.01],
       ['field', 'Pull radius', 20, 300, 5], ['pathSpeed', 'Path speed', 10, 400, 5], ['curve', 'Share curve', 0.5, 4, 0.1],
-      ['glow', 'Glow', 0, 3, 0.1],
+      ['glow', 'Glow', 0, 3, 0.1], ['infoDelay', 'Info delay s', 0, 2, 0.1],
     ];
     const tune = document.getElementById('tune'), sliders = {};
     TUNE.forEach(([key, label, min, max, step]) => {
