@@ -22,6 +22,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     /* Fade only: no travel, no scale, short durations. */
+    --motion-duration-base: 150ms;
     --motion-duration-slow: 150ms;
     --motion-duration-page: 150ms;
     --motion-distance-sm: 0px;
