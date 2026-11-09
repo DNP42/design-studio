@@ -257,7 +257,8 @@
       live += ((N / 2) * (1 + best) - live) * Math.min(1, 0.08 * dt);
       const L = Math.min(N, Math.round(live));
       for (let i = L; i < N; i++) { X[i] = cx; Y[i] = cy; VX[i] = 0; VY[i] = 0; }
-      const spacing = HIVE_RADIUS / Math.sqrt(Math.max(L, 1));
+      // At rest the hive packs tighter; it loosens as an element takes focus.
+      const spacing = HIVE_RADIUS * (0.6 + 0.4 * best) / Math.sqrt(Math.max(L, 1));
       // Angular speed drifts through zero, so the hive turns, eases and turns back.
       spin += (1.1 * Math.sin(t * 0.37) + 0.5 * Math.sin(t * 0.91 + 1.7)) * dt / 60;
 
