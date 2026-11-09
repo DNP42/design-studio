@@ -17,6 +17,8 @@
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
  * Live tuning: swarm.set({ spacing, size, orbit, stiffness, scouts, field, pathSpeed, curve, glow, count, ... }).
  * CSS: style .swarm-tip (and .swarm-tip.is-danger) for the info text; .is-on is set while it shows.
+ *   While it shows, the tip is a swarm target too: half the focused particles run its border, and it gets
+ *   --swarm, --swarm-color and .is-swarmed like a button.
  * CSS on the element:
  *   --swarm-color         swarm tint while it holds this element
  *   --swarm               written by the script, 0..1, use it in your own CSS
@@ -69,7 +71,7 @@
     document.body.appendChild(cvs);
     // Tooltip base: hidden until .is-on. Put first in <head>, so the page CSS wins.
     const tipCss = document.createElement('style');
-    tipCss.textContent = `.swarm-tip{position:fixed;left:0;top:0;z-index:${+cvs.style.zIndex + 1};pointer-events:none;transform:translateX(-50%);` +
+    tipCss.textContent = `.swarm-tip{position:fixed;left:0;top:0;z-index:${+cvs.style.zIndex - 1};pointer-events:none;transform:translateX(-50%);` +
       `visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}.swarm-tip.is-on{visibility:visible;opacity:1}`;
     document.head.prepend(tipCss);
     let tipId = 0, danger = null, dangerSrc = null;
@@ -408,6 +410,7 @@
         tip.id = 'swarm-tip-' + (++tipId);
         tip.setAttribute('role', 'tooltip');
         tip.textContent = e.info;
+        tip.style.setProperty('--swarm-color', e.danger ? o.dangerColor : getComputedStyle(el).getPropertyValue('--swarm-color').trim() || o.color);
         document.body.appendChild(tip);
         el.setAttribute('aria-describedby', (had ? had + ' ' : '') + tip.id);
       }
@@ -432,7 +435,10 @@
       if (tp !== e.cTp) e.tip.style.top = e.cTp = tp;
     }
 
-    function readRadius(e) { e.rad = parseFloat(getComputedStyle(e.el).borderTopLeftRadius) || 0; }
+    function readRadius(e) {
+      e.rad = parseFloat(getComputedStyle(e.el).borderTopLeftRadius) || 0;
+      if (e.tip) e.trad = parseFloat(getComputedStyle(e.tip).borderTopLeftRadius) || 0;
+    }
 
     function resize() {
       const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -495,6 +501,12 @@
         // A scout visits only a near, calm element that is on screen, so it never leaves the canvas.
         // Info: the cursor rests on the element for infoDelay seconds, or keyboard focus is on it.
         if (e.ishape) { e.dw = e.k > 0.85 && has ? e.dw + dt / 60 : 0; e.tipOn = o.info && (e.dw > o.infoDelay || e.focus); }
+        if (e.tip) {                                        // the shown tip is a target: read its box (last frame's place)
+          const tr = e.tipOn ? e.tip.getBoundingClientRect() : null;
+          e.tb = tr && tr.width ? { x: tr.left, y: tr.top, w: tr.width, h: tr.height } : null;
+          e.wTS = e.tipOn ? e.k.toFixed(3) : '0.000';
+          e.wTOn = e.tipOn && e.k > 0.5;
+        }
         e.scout = !e.quiet && e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
         if (e.k > best) { best = e.k; act = e; }
       }
@@ -524,6 +536,8 @@
         if (e.tip) {
           if (e.tipOn) placeTip(e, { x: e.box.x, y: e.box.y, width: e.box.w, height: e.box.h });
           if (e.tipOn !== e.cTip) e.tip.classList.toggle('is-on', e.cTip = e.tipOn);
+          if (e.wTS !== e.cTS) e.tip.style.setProperty('--swarm', e.cTS = e.wTS);
+          if (e.wTOn !== e.cTOn) e.tip.classList.toggle('is-swarmed', e.cTOn = e.wTOn);
         }
       }
 
@@ -553,6 +567,9 @@
       // The path set: the info icon while it shows, else the glyph or shape outlines, else (null) the border.
       const sh = act && act.tipOn && act.ishape.pts ? act.ishape : act && act.kind !== 'border' && act.pts ? act : null;
       const pts = sh ? sh.pts : null;
+      // The shown tip: half the path particles run its border, the rest keep the icon.
+      const tb = act && act.tipOn ? act.tb : null, trad = tb ? Math.min(act.trad || 0, tb.w / 2, tb.h / 2) : 0;
+      const tlen = tb ? Math.max(1, 2 * (tb.w + tb.h) - 8 * trad + TAU * trad) : 1;
       const damp = Math.pow(0.8, dt);
       const every = o.scouts > 0 ? Math.max(1, Math.round(1 / o.scouts)) : 0;
       const sz = o.size, gl = o.glow, pathAdv = t * o.pathSpeed;
@@ -575,7 +592,12 @@
         }
         if (act && Q[i] < share) {  // on the path: spring fully onto it, no blend
           let ex, ey;
-          if (pts) {                                        // travel a glyph contour at a constant tangent speed
+          if (tb && R[i] < 0.5) {                           // travel the tip border
+            perim(tb.x, tb.y, tb.w, tb.h, trad, U[i] + pathAdv / tlen, tmp);
+            const off = (Q[i] - 0.5) * 3 + Math.sin(t * 3 + PH[i] * 5) * 0.6;
+            ex = tmp[0] + tmp[2] * off;
+            ey = tmp[1] + tmp[3] * off;
+          } else if (pts) {                                        // travel a glyph contour at a constant tangent speed
             onOutline(sh, U[i] * sh.total, pathAdv, tmp);
             const [sx, sy, lift] = TEXT_PATHS[sh === act && act.kind === 'text' ? act.path : 'border'] || TEXT_PATHS.border;
             ex = bx + tmp[0] + tmp[2] * lift + sx + (R[i] - 0.5) * 1.5;
@@ -737,7 +759,7 @@
       const rgb = toRGB(c);
       o.color = c;
       base.splice(0, 3, ...rgb);
-      els.forEach(e => { e.rgb = rgb; e.el.style.setProperty('--swarm-color', c); });
+      els.forEach(e => { e.rgb = rgb; e.el.style.setProperty('--swarm-color', c); if (e.tip && !e.danger) e.tip.style.setProperty('--swarm-color', c); });
       prose.forEach(p => p.el.style.setProperty('--swarm-color', c));
     }
     // Options that need more than a store go through their setter; the rest are read every frame.

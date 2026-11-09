@@ -101,10 +101,15 @@
   /* Info text: the swarm draws a circled 'i' (or a red X for danger) above the button; this box shows below it. */
   .swarm-tip {
     max-width: min(280px, calc(100vw - 32px)); padding: 8px 12px; border-radius: 10px;
-    background: #0d1118f2; color: #e8edf5; border: 1px solid #ffffff1f; box-shadow: 0 6px 24px #0006;
+    background: #0d1118f2; color: #e8edf5; border: 1px solid transparent;   /* the particles are its border */
     font: 500 13px/1.45 system-ui, sans-serif; text-align: center;
+    box-shadow: 0 6px 24px #0006, 0 0 calc(var(--swarm, 0) * 22px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 45%), transparent);
+    text-shadow: 0 0 calc(var(--swarm, 0) * 10px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 55%), transparent);
   }
-  .swarm-tip.is-danger { border-color: #ff4d4d99; color: #ffd9d9; }
+  .swarm-tip.is-swarmed { animation: tip-breathe 2.4s ease-in-out infinite; }
+  @keyframes tip-breathe { 50% { scale: calc(1 + var(--swarm, 0) * 0.03); } }
+  @media (prefers-reduced-motion: reduce) { .swarm-tip.is-swarmed { animation-duration: 5s; } }
+  .swarm-tip.is-danger { color: #ffd9d9; }
   .danger-zone { position: relative; padding: 64px 32px 24px; border: 1px dashed #ff4d4d88; border-radius: 14px; }
   .dz-title {
     position: absolute; top: -0.75em; left: 16px; margin: 0; padding: 0 8px; background: var(--light-bg);
