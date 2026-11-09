@@ -37,7 +37,7 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({words, framesPe
           return (
             <span key={i} style={{
               fontSize, fontWeight: 900, color: active ? highlightTextColor : textColor,
-              background: active ? highlightColor : 'transparent', padding: '4px 18px', borderRadius: 18,
+              background: active ? highlightColor : 'transparent', padding: '4px 18px', overflowWrap: 'anywhere', borderRadius: 18,
               transform: `scale(${0.6 + 0.4 * s}) translateY(${(1 - s) * 40}px)`, opacity: op,
               textShadow: active ? 'none' : '0 6px 0 rgba(0,0,0,.35)',
             }}>{w}</span>
