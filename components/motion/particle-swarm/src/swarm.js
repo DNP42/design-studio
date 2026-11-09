@@ -63,14 +63,14 @@
     const col = base.slice();
     const tmp = new Float32Array(4);
 
+    // Resize the arrays in place: the first min(old, n) particles keep their state, new ones start near the cursor.
     function alloc(n) {
+      const keep = Math.min(N || 0, n);
+      const grow = a => { const b = new Float32Array(n); if (a) b.set(a.subarray(0, keep)); return b; };
+      X = grow(X); Y = grow(Y); VX = grow(VX); VY = grow(VY); PH = grow(PH);
+      K = grow(K); S = grow(S); U = grow(U); R = grow(R); Q = grow(Q);
       N = n;
-      X = new Float32Array(n); Y = new Float32Array(n);
-      VX = new Float32Array(n); VY = new Float32Array(n);
-      PH = new Float32Array(n);
-      K = new Float32Array(n); S = new Float32Array(n); U = new Float32Array(n);
-      R = new Float32Array(n); Q = new Float32Array(n);
-      for (let i = 0; i < n; i++) {
+      for (let i = keep; i < n; i++) {
         X[i] = cx + (Math.random() - 0.5) * 200;
         Y[i] = cy + (Math.random() - 0.5) * 200;
         PH[i] = Math.random() * TAU;
@@ -174,7 +174,7 @@
           el, kind: el.dataset.swarm === 'text' ? 'text' : 'border',
           magnet: calm || isNaN(m) ? o.magnet : m,
           rgb: toRGB(cs.getPropertyValue('--swarm-color').trim() || o.color),
-          k: 0, tx: 0, ty: 0, pts: null, rad: 0, r: 0, scout: false,
+          k: 0, tx: 0, ty: 0, pts: null, rad: 0, r: 0, scout: false, cT: '', cS: null, cOn: false,
         };
       });
       els.forEach(readRadius);
@@ -236,14 +236,20 @@
         if (e.k < 0.002) e.k = 0;
         e.tx = (cx - (r.left + r.width / 2)) * e.magnet * e.k;
         e.ty = (cy - (r.top + r.height / 2)) * e.magnet * e.k;
-        e.el.style.translate = e.k ? `${e.tx.toFixed(2)}px ${e.ty.toFixed(2)}px` : '';
-        e.el.style.setProperty('--swarm', e.k.toFixed(3));
-        e.el.classList.toggle('is-swarmed', e.k > 0.5);
+        e.wT = e.k ? `${e.tx.toFixed(2)}px ${e.ty.toFixed(2)}px` : '';
+        e.wS = e.k.toFixed(3);
+        e.wOn = e.k > 0.5;
         const bo = e.box = { x: r.left + e.tx, y: r.top + e.ty, w: r.width, h: r.height };
         e.r = Math.min(e.rad, bo.w / 2, bo.h / 2);
         // A scout visits only a near, calm element that is on screen, so it never leaves the canvas.
         e.scout = e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
         if (e.k > best) { best = e.k; act = e; }
+      }
+      // Style writes come after all rect reads (one layout flush), and only when a value changed.
+      for (const e of els) {
+        if (e.wT !== e.cT) e.el.style.translate = e.cT = e.wT;
+        if (e.wS !== e.cS) e.el.style.setProperty('--swarm', e.cS = e.wS);
+        if (e.wOn !== e.cOn) e.el.classList.toggle('is-swarmed', e.cOn = e.wOn);
       }
 
       const spacing = HIVE_RADIUS / Math.sqrt(Math.max(N, 1));
@@ -370,7 +376,7 @@
 
     return {
       setMode,
-      setCount(n) { alloc(calm ? Math.round(n * 0.3) : n); els.forEach(e => e.kind === 'text' && sampleText(e)); },
+      setCount(n) { if (!off) alloc(calm ? Math.round(n * 0.3) : n); },
       refresh: scan,
       destroy() {
         cancelAnimationFrame(raf);
