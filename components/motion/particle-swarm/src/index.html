@@ -47,10 +47,17 @@
   .egg:focus-visible { outline: 1px dashed #ffffff40; outline-offset: 4px; }
 
   .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
+  /* Button padding rules (all in em, so padding scales with the font size):
+     1. Text button: padding = 0.55em top/bottom, 1.1em left/right (x = 2 * y). Height = 1em line + 2 * 0.55em = 2.1em.
+     2. Pill (radius 999px): x must be >= half the height (1.05em), so the text stays clear of the curve. 1.1em passes.
+     3. The label grows up to 19% (swarm 8% x click burst 10%). The x padding covers it: keep x >= 0.1 * label width.
+     4. Size a button with font-size only. Do not set px padding on a type; change --pad-y / --pad-x if a type needs it.
+     5. Icon button: a square of the text-button height (1em + 2 * --pad-y). Text link: 0.25em all round.
+     6. Shape buttons (player, egg) are exempt: the swarm draws their ring and icon, so they keep a fixed size. */
   .btn {
-    --swarm-color: #7cf7ff;
+    --swarm-color: #7cf7ff; --pad-y: 0.55em; --pad-x: 1.1em;
     font: 600 18px/1 inherit; font-family: inherit; letter-spacing: 0.04em;
-    padding: 20px 40px; border-radius: 999px; background: transparent; cursor: none;
+    padding: var(--pad-y) var(--pad-x); border-radius: 999px; background: transparent; cursor: none;
     color: var(--fg);
     border: 1.5px solid transparent;                   /* the particles are the moving border */
     box-shadow: 0 0 calc(var(--swarm, 0) * 22px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 45%), transparent);
@@ -60,9 +67,9 @@
   /* Button types: each keeps the transparent border; only the shape and size change. */
   .btn.sharp { --swarm-color: #b5ff6e; border-radius: 0; }
   .btn.round { --swarm-color: #ffb36e; border-radius: 16px; }
-  .btn.icon { --swarm-color: #c9a6ff; width: 64px; height: 64px; padding: 0; border-radius: 50%; font-size: 24px; }
-  .btn.link { --swarm-color: #6effc0; padding: 8px 6px; border-radius: 6px; font-weight: 500; text-decoration: underline; text-underline-offset: 5px; }
-  .btn.cta { --swarm-color: #ff6e6e; padding: 28px 72px; border-radius: 22px; font-size: 24px; font-weight: 700; }
+  .btn.icon { --swarm-color: #c9a6ff; width: calc(1em + 2 * var(--pad-y)); height: calc(1em + 2 * var(--pad-y)); padding: 0; border-radius: 50%; font-size: 24px; }
+  .btn.link { --swarm-color: #6effc0; --pad-y: 0.25em; --pad-x: 0.25em; border-radius: 6px; font-weight: 500; text-decoration: underline; text-underline-offset: 5px; }
+  .btn.cta { --swarm-color: #ff6e6e; border-radius: 0.5em; font-size: 24px; font-weight: 700; }
   .types { align-items: center; max-width: 760px; }
 
   /* The label grows with the swarm, then breathes while the swarm holds the button. */
