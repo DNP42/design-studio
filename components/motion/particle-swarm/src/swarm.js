@@ -10,6 +10,7 @@
  *   data-swarm-scout="off"  scouts skip this element (for a target that must stay hidden)
  * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
  *   data-swarm-path="offset"  text path style: border (on the outline) | offset (pushed out 5px) | shadow (shifted down-right)
+ *   data-swarm-prose      running text (descriptions, info): the swarm avoids it, lights it, goes behind it or over it
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
  * Live tuning: swarm.set({ spacing, size, orbit, stiffness, scouts, field, pathSpeed, curve, glow, count, ... }).
  * CSS on the element:
@@ -42,6 +43,8 @@
       trail: 0.3,          // tail length: lower = longer tails
       selector: '[data-swarm]',
       textPath: 'border',    // text path style: 'border' | 'offset' | 'shadow'; per element: data-swarm-path
+      prose: 'avoid',        // running text [data-swarm-prose]: 'avoid' | 'highlight' (spotlight, styled by the page) | 'behind' | 'over'
+      proseGap: 10,          // px the swarm keeps clear of running text in 'avoid'
       reducedMotion: 'calm', // with prefers-reduced-motion: 'calm' (30% count, no drift, no lean) | 'off'
     }, opts || {});
 
@@ -70,7 +73,7 @@
     let W = 0, H = 0;
     let N, X, Y, VX, VY, PH, K, S, U, R, Q;
     let live = 0, spin = 0;
-    let els = [];
+    let els = [], prose = [], boxes = [];
     let mx = innerWidth / 2, my = innerHeight / 2, cx = mx, cy = my;
     let has = false, t = 0, last = performance.now(), raf = 0;
     const base = toRGB(o.color);
@@ -295,6 +298,9 @@
           k: 0, tx: 0, ty: 0, pts: null, rad: 0, r: 0, scout: false, cT: '', cS: null, cOn: false,
         };
       });
+      prose.forEach(clearProse);
+      prose = [...document.querySelectorAll('[data-swarm-prose]')].map(el => ({ el, k: 0, cS: null, cX: null, cY: null, raised: false }));
+      setProse(o.prose);
       els.forEach(readRadius);
       els.forEach(sample);
       els.forEach(e => {                                    // a click on a shape cycles to its next design
@@ -373,7 +379,25 @@
         e.scout = !e.quiet && e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
         if (e.k > best) { best = e.k; act = e; }
       }
+      // Running text: on-screen boxes for 'avoid'; a spotlight position and closeness for 'highlight'.
+      boxes = [];
+      for (const p of prose) {
+        const r = p.el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > H || r.right < 0 || r.left > W) { p.wX = p.wY = '-999px'; p.wS = '0.000'; continue; }
+        boxes.push(r);
+        if (o.prose !== 'highlight') continue;
+        const d = Math.hypot(Math.max(r.left - cx, 0, cx - r.right), Math.max(r.top - cy, 0, cy - r.bottom));
+        const g = Math.max(0, 1 - d / Math.max(o.field, 1));
+        p.k += (g * g * (3 - 2 * g) - p.k) * Math.min(1, 0.12 * dt);
+        p.wS = p.k.toFixed(3);
+        p.wX = Math.round(cx - r.left) + 'px'; p.wY = Math.round(cy - r.top) + 'px';
+      }
       // Style writes come after all rect reads (one layout flush), and only when a value changed.
+      if (o.prose === 'highlight') for (const p of prose) {
+        if (p.wS !== p.cS) p.el.style.setProperty('--swarm', p.cS = p.wS);
+        if (p.wX !== p.cX) p.el.style.setProperty('--sx', p.cX = p.wX);
+        if (p.wY !== p.cY) p.el.style.setProperty('--sy', p.cY = p.wY);
+      }
       for (const e of els) {
         if (e.wT !== e.cT) e.el.style.translate = e.cT = e.wT;
         if (e.wS !== e.cS) e.el.style.setProperty('--swarm', e.cS = e.wS);
@@ -406,6 +430,7 @@
       const damp = Math.pow(0.8, dt);
       const every = o.scouts > 0 ? Math.max(1, Math.round(1 / o.scouts)) : 0;
       const sz = o.size, gl = o.glow, pathAdv = t * o.pathSpeed;
+      const avoid = o.prose === 'avoid' && boxes.length, gap = o.proseGap;
 
       for (let i = 0; i < L; i++) {
         const a = i * GOLDEN + spin * (1.4 - 0.7 * Math.sqrt(i / L));   // inner rings turn faster: a fluid swirl
@@ -438,6 +463,21 @@
           tx = ex;
           ty = ey;
           stiff += 0.05;
+        } else if (avoid) {                                 // keep off running text: a target inside moves to the nearest edge
+          for (const b of boxes) {
+            const l = b.left - gap, rr = b.right + gap, tp = b.top - gap, bt = b.bottom + gap;
+            if (tx > l && tx < rr && ty > tp && ty < bt) {
+              const band = R[i] * 8, m = Math.min(tx - l, rr - tx, ty - tp, bt - ty);
+              if (m === tx - l) tx = l - band; else if (m === rr - tx) tx = rr + band;
+              else if (m === ty - tp) ty = tp - band; else ty = bt + band;
+            }
+            // a particle already inside is nudged out the short way
+            if (X[i] > l && X[i] < rr && Y[i] > tp && Y[i] < bt) {
+              const m = Math.min(X[i] - l, rr - X[i], Y[i] - tp, bt - Y[i]);
+              if (m === X[i] - l) VX[i] -= 0.8 * dt; else if (m === rr - X[i]) VX[i] += 0.8 * dt;
+              else if (m === Y[i] - tp) VY[i] -= 0.8 * dt; else VY[i] += 0.8 * dt;
+            }
+          }
         }
         VX[i] = (VX[i] + (tx - X[i]) * stiff * dt) * damp;
         VY[i] = (VY[i] + (ty - Y[i]) * stiff * dt) * damp;
@@ -523,6 +563,24 @@
       raf = requestAnimationFrame(frame);
     }
 
+    // 'behind' lifts the text above the canvas; 'highlight' marks the root so the page can style the spotlight.
+    function clearProse(p) {
+      ['--swarm', '--sx', '--sy'].forEach(v => p.el.style.removeProperty(v));
+      p.cS = p.cX = p.cY = null; p.k = 0;
+      if (p.raised) { p.el.style.position = p.el.style.zIndex = ''; p.raised = false; }
+    }
+    function setProse(mode) {
+      o.prose = mode;
+      const root = document.documentElement.classList;
+      ['avoid', 'highlight', 'behind', 'over'].forEach(m => root.toggle('swarm-prose-' + m, m === mode));
+      prose.forEach(p => {
+        clearProse(p);
+        if (mode !== 'behind') return;
+        if (getComputedStyle(p.el).position === 'static') p.el.style.position = 'relative';
+        p.el.style.zIndex = String(+cvs.style.zIndex + 1);
+        p.raised = true;
+      });
+    }
     function setCount(n) { o.count = n; if (!off) alloc((calm ? Math.round(n * 0.3) : n) * 2); }
     function setPath(style) {
       o.textPath = style;
@@ -534,12 +592,13 @@
       o.color = c;
       base.splice(0, 3, ...rgb);
       els.forEach(e => { e.rgb = rgb; e.el.style.setProperty('--swarm-color', c); });
+      prose.forEach(p => p.el.style.setProperty('--swarm-color', c));
     }
     // Options that need more than a store go through their setter; the rest are read every frame.
-    const SETTERS = { count: setCount, mode: setMode, textPath: setPath, color: setColor };
+    const SETTERS = { count: setCount, mode: setMode, textPath: setPath, color: setColor, prose: setProse };
 
     return {
-      setMode, setCount, setPath, setColor,
+      setMode, setCount, setPath, setColor, setProse,
       set(part) { for (const key in part) (SETTERS[key] || (v => { o[key] = v; }))(part[key]); },
       get: () => Object.assign({}, o),
       refresh: scan,
@@ -550,6 +609,8 @@
         document.documentElement.removeEventListener('pointerleave', onLeave);
         removeEventListener('resize', onResize);
         els.forEach(e => { e.el.style.translate = ''; e.el.style.removeProperty('--swarm'); e.el.classList.remove('is-swarmed'); if (e.off) e.off(); });
+        prose.forEach(clearProse);
+        ['avoid', 'highlight', 'behind', 'over'].forEach(m => document.documentElement.classList.remove('swarm-prose-' + m));
         cvs.remove();
       },
     };

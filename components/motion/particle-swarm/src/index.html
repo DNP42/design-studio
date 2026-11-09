@@ -25,7 +25,13 @@
     color: var(--fg);
     text-shadow: 0 0 calc(var(--swarm, 0) * 26px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 65%), transparent);
   }
-  .lede { margin: -16px 0 0; color: var(--muted); max-width: 46ch; text-align: center; }
+  .lede { --swarm-color: #ffd36e; --rest: var(--muted); margin: -16px 0 0; color: var(--rest); max-width: 46ch; text-align: center; }
+  /* Prose "highlight": a spotlight in the text itself. The swarm writes --sx/--sy (its centre) and --swarm (closeness). */
+  .swarm-prose-highlight [data-swarm-prose] {
+    color: transparent; -webkit-background-clip: text; background-clip: text;
+    background-image: radial-gradient(circle calc(30px + var(--swarm, 0) * 60px) at var(--sx, -999px) var(--sy, -999px),
+      var(--swarm-color), color-mix(in oklab, var(--swarm-color) 30%, var(--fg)) 45%, var(--rest));
+  }
 
   /* Invisible on purpose: no colour, no glow CSS. Only the swarm shows it. */
   .logo {
@@ -78,7 +84,7 @@
 
   .light { background: var(--light-bg); color: var(--light-fg); }
   .light .title { --fg: var(--light-fg); --swarm-color: #3a5bff; font-size: clamp(48px, 11vw, 140px); }
-  .light .lede { color: #5a606b; }
+  .light .lede { --rest: #5a606b; --fg: var(--light-fg); --swarm-color: #3a5bff; }
   .light .btn { --fg: var(--light-fg); --swarm-color: #3a5bff; }
 
   .term {
@@ -128,7 +134,7 @@
   <section>
     <h1 class="title" data-swarm="text" data-swarm-magnet="0.04">Swarm</h1>
     <p class="logo" data-swarm="text" data-swarm-magnet="0" data-swarm-scout="off">DNP</p>
-    <p class="lede">Move the cursor. The swarm follows it. Go near the word or a button: the closer you get, the more of the swarm leaves the hive and runs along the letter outlines or the button border.</p>
+    <p class="lede" data-swarm-prose>Move the cursor. The swarm follows it. Go near the word or a button: the closer you get, the more of the swarm leaves the hive and runs along the letter outlines or the button border.</p>
     <div class="row">
       <button class="btn" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Get started</span></button>
       <button class="btn alt" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Read more</span></button>
@@ -151,7 +157,7 @@
 
   <section class="light">
     <h2 class="title" data-swarm="text" data-swarm-magnet="0.04">Contrast</h2>
-    <p class="lede">Switch to Contrast mode. The swarm inverts every pixel it crosses, dark or light.</p>
+    <p class="lede" data-swarm-prose>Switch to Contrast mode. The swarm inverts every pixel it crosses, dark or light.</p>
     <div class="row">
       <button class="btn" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Subscribe</span></button>
     </div>
@@ -171,6 +177,12 @@
         <option value="border" selected>Border</option>
         <option value="offset">Offset</option>
         <option value="shadow">Shadow</option>
+      </select>
+      <select aria-label="Running text" title="What the swarm does with running text">
+        <option value="avoid" selected>Text: avoid</option>
+        <option value="highlight">Text: highlight</option>
+        <option value="behind">Text: behind</option>
+        <option value="over">Text: over</option>
       </select>
       <input type="color" value="#ffd36e" aria-label="Swarm colour">
       <button type="button" id="tune-btn" aria-expanded="false" aria-controls="tune">Tune</button>
@@ -196,6 +208,8 @@
     countSel.addEventListener('change', e => { swarm.setCount(+e.target.value); sliders.count.sync(+e.target.value); render(); });
     const pathSel = document.querySelector('[aria-label="Text path"]');
     pathSel.addEventListener('change', e => { swarm.setPath(e.target.value); render(); });
+    const proseSel = document.querySelector('[aria-label="Running text"]');
+    proseSel.addEventListener('change', e => { swarm.setProse(e.target.value); render(); });
     const colorIn = document.querySelector('.controls input[type=color]');
     const showColor = c => { colorIn.value = c; document.getElementById('term').style.setProperty('--accent', c); };
     colorIn.addEventListener('input', e => { swarm.setColor(e.target.value); showColor(e.target.value); render(); });
@@ -228,7 +242,7 @@
     });
 
     // Test tools: the readout is the exact call that rebuilds what you see; Copy puts it on the clipboard.
-    const KEYS = ['mode', 'color', 'textPath', ...TUNE.map(t => t[0])];
+    const KEYS = ['mode', 'color', 'textPath', 'prose', ...TUNE.map(t => t[0])];
     const readout = document.getElementById('readout');
     function config() {
       const cur = swarm.get(), out = {};
@@ -243,10 +257,10 @@
       KEYS.forEach(k => { d[k] = DEFAULTS[k]; });
       swarm.set(d);
       // setColor paints every target; give each one back its own --swarm-color from the CSS.
-      document.querySelectorAll('[data-swarm]').forEach(el => el.style.removeProperty('--swarm-color'));
+      document.querySelectorAll('[data-swarm], [data-swarm-prose]').forEach(el => el.style.removeProperty('--swarm-color'));
       swarm.refresh();
       TUNE.forEach(([k]) => sliders[k].sync(DEFAULTS[k]));
-      countSel.value = DEFAULTS.count; pathSel.value = DEFAULTS.textPath;
+      countSel.value = DEFAULTS.count; pathSel.value = DEFAULTS.textPath; proseSel.value = DEFAULTS.prose;
       showMode(DEFAULTS.mode); showColor(startAccent); render();
     });
     const copyBtn = document.getElementById('copy');
