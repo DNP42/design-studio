@@ -40,7 +40,7 @@ export const LogoReveal: React.FC<LogoRevealProps> = ({text, background, letterC
               fontSize, fontWeight: 900, color: letterColor,
               transform: `translateY(${y}px) scale(${sx},${Math.max(sy, 0.6)})`,
               transformOrigin: '50% 100%', opacity: f < start ? 0.25 : 1,
-            }}>{ch === ' ' ? ' ' : ch}</div>
+            }}>{ch === ' ' ? '\u00a0' : ch}</div>
           );
         })}
       </div>
