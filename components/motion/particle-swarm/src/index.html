@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Particle Swarm</title>
+<style>
+  :root {
+    --bg: #07090d; --fg: #e8eef5; --muted: #8893a3; --line: #ffffff2e;
+    --light-bg: #f2efe8; --light-fg: #121418;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    cursor: crosshair;
+  }
+  section { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 40px; padding: 48px 16px; }
+
+  .title {
+    --swarm: 0; --swarm-color: #ffd36e;
+    margin: 0; text-align: center; text-transform: uppercase;
+    font-size: clamp(64px, 16vw, 200px); font-weight: 900; letter-spacing: 0.02em; line-height: 1;
+    color: color-mix(in oklab, var(--fg) calc(100% - var(--swarm) * 88%), transparent);
+    -webkit-text-stroke: 1px color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 100%), transparent);
+  }
+  .lede { margin: -16px 0 0; color: var(--muted); max-width: 46ch; text-align: center; }
+
+  .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
+  .btn {
+    --swarm: 0; --swarm-color: #7cf7ff;
+    font: 600 18px/1 inherit; font-family: inherit; letter-spacing: 0.04em;
+    padding: 20px 40px; border-radius: 999px; background: transparent; cursor: pointer;
+    color: color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 100%), var(--fg));
+    border: 1.5px solid color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 100%), var(--line));
+    box-shadow:
+      0 0 calc(var(--swarm) * 32px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 55%), transparent),
+      inset 0 0 calc(var(--swarm) * 20px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 35%), transparent);
+  }
+  .btn.alt { --swarm-color: #ff6ec7; border-radius: 10px; }
+
+  .light { background: var(--light-bg); color: var(--light-fg); }
+  .light .title { --fg: var(--light-fg); --swarm-color: #3a5bff; font-size: clamp(48px, 11vw, 140px); }
+  .light .lede { color: #5a606b; }
+  .light .btn { --fg: var(--light-fg); --line: #0000002e; --swarm-color: #3a5bff; }
+
+  .controls {
+    position: fixed; z-index: 10000; left: 50%; bottom: 16px; translate: -50% 0;
+    display: flex; gap: 6px; padding: 6px; border-radius: 999px;
+    background: #0d1118e6; border: 1px solid var(--line); backdrop-filter: blur(8px);
+  }
+  .controls button, .controls select {
+    font: 500 13px/1 inherit; font-family: inherit; color: var(--fg); background: transparent;
+    border: 0; border-radius: 999px; padding: 9px 14px; cursor: pointer;
+  }
+  .controls button[aria-pressed="true"] { background: #ffffff1f; }
+  .controls select { background: #ffffff0f; }
+</style>
+</head>
+<body>
+  <section>
+    <h1 class="title" data-swarm="text" data-swarm-magnet="0.04">Swarm</h1>
+    <p class="lede">Move the cursor. The swarm follows it. Go near the word or a button: the swarm fills the letters and runs along the border.</p>
+    <div class="row">
+      <button class="btn" data-swarm="border" data-swarm-magnet="0.22">Get started</button>
+      <button class="btn alt" data-swarm="border" data-swarm-magnet="0.22">Read more</button>
+    </div>
+  </section>
+
+  <section class="light">
+    <h2 class="title" data-swarm="text" data-swarm-magnet="0.04">Contrast</h2>
+    <p class="lede">Switch to Contrast mode. The swarm inverts every pixel it crosses, dark or light.</p>
+    <div class="row">
+      <button class="btn" data-swarm="border" data-swarm-magnet="0.22">Subscribe</button>
+    </div>
+  </section>
+
+  <div class="controls" role="group" aria-label="Swarm settings">
+    <button type="button" data-mode="glow" aria-pressed="true">Glow</button>
+    <button type="button" data-mode="contrast" aria-pressed="false">Contrast</button>
+    <select aria-label="Particle count">
+      <option value="300">300</option>
+      <option value="700" selected>700</option>
+      <option value="1200">1200</option>
+    </select>
+  </div>
+
+  <script src="swarm.js"></script>
+  <script>
+    const swarm = createSwarm({ count: 700 });
+    const modeBtns = document.querySelectorAll('[data-mode]');
+    modeBtns.forEach(b => b.addEventListener('click', () => {
+      swarm.setMode(b.dataset.mode);
+      modeBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    }));
+    document.querySelector('.controls select').addEventListener('change', e => swarm.setCount(+e.target.value));
+  </script>
+</body>
+</html>
