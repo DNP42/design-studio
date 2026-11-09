@@ -19,31 +19,27 @@
   section { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 40px; padding: 48px 16px; }
 
   .title {
-    --swarm: 0; --swarm-color: #ffd36e;
+    --swarm-color: #ffd36e;
     margin: 0; text-align: center; text-transform: uppercase;
     font-size: clamp(64px, 16vw, 200px); font-weight: 900; letter-spacing: 0.02em; line-height: 1;
-    color: color-mix(in oklab, var(--fg) calc(100% - var(--swarm) * 88%), transparent);
-    -webkit-text-stroke: 1px color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 100%), transparent);
+    color: var(--fg);
   }
   .lede { margin: -16px 0 0; color: var(--muted); max-width: 46ch; text-align: center; }
 
   .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
   .btn {
-    --swarm: 0; --swarm-color: #7cf7ff;
+    --swarm-color: #7cf7ff;
     font: 600 18px/1 inherit; font-family: inherit; letter-spacing: 0.04em;
     padding: 20px 40px; border-radius: 999px; background: transparent; cursor: pointer;
-    color: color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 100%), var(--fg));
-    border: 1.5px solid color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 100%), var(--line));
-    box-shadow:
-      0 0 calc(var(--swarm) * 32px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 55%), transparent),
-      inset 0 0 calc(var(--swarm) * 20px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm) * 35%), transparent);
+    color: var(--fg);
+    border: 1.5px solid transparent;                   /* the particles are the moving border */
   }
   .btn.alt { --swarm-color: #ff6ec7; border-radius: 10px; }
 
   .light { background: var(--light-bg); color: var(--light-fg); }
   .light .title { --fg: var(--light-fg); --swarm-color: #3a5bff; font-size: clamp(48px, 11vw, 140px); }
   .light .lede { color: #5a606b; }
-  .light .btn { --fg: var(--light-fg); --line: #0000002e; --swarm-color: #3a5bff; }
+  .light .btn { --fg: var(--light-fg); --swarm-color: #3a5bff; }
 
   .controls {
     position: fixed; z-index: 10000; left: 50%; bottom: 16px; translate: -50% 0;
@@ -61,7 +57,7 @@
 <body>
   <section>
     <h1 class="title" data-swarm="text" data-swarm-magnet="0.04">Swarm</h1>
-    <p class="lede">Move the cursor. The swarm follows it. Go near the word or a button: the swarm fills the letters and runs along the border.</p>
+    <p class="lede">Move the cursor. The swarm follows it. Go near the word or a button: the closer you get, the more of the swarm leaves the hive and runs along the letter outlines or the button border.</p>
     <div class="row">
       <button class="btn" data-swarm="border" data-swarm-magnet="0.22">Get started</button>
       <button class="btn alt" data-swarm="border" data-swarm-magnet="0.22">Read more</button>
