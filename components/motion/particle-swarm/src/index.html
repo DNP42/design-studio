@@ -16,7 +16,7 @@
     font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
     cursor: crosshair;
   }
-  section { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 40px; padding: 48px 16px; }
+  section { position: relative; min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 40px; padding: 48px 16px; }
 
   .title {
     --swarm-color: #ffd36e;
@@ -26,6 +26,19 @@
     text-shadow: 0 0 calc(var(--swarm, 0) * 26px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 65%), transparent);
   }
   .lede { margin: -16px 0 0; color: var(--muted); max-width: 46ch; text-align: center; }
+
+  /* Invisible on purpose: no colour, no glow CSS. Only the swarm shows it. */
+  .logo {
+    --swarm-color: #ffd36e;
+    margin: 0; color: transparent; text-shadow: none; user-select: none;
+    font-size: clamp(56px, 12vw, 120px); font-weight: 900; letter-spacing: 0.08em; line-height: 1;
+  }
+  /* Invisible button: the swarm draws an Easter egg around it; each click changes the design. */
+  .egg {
+    position: absolute; right: clamp(100px, 14vw, 240px); bottom: 130px; width: 60px; height: 80px;
+    padding: 0; border: 0; background: none; color: transparent; cursor: crosshair;
+  }
+  .egg:focus-visible { outline: 1px dashed #ffffff40; outline-offset: 4px; }
 
   .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
   .btn {
@@ -79,6 +92,7 @@
 <body>
   <section>
     <h1 class="title" data-swarm="text" data-swarm-magnet="0.04">Swarm</h1>
+    <p class="logo" data-swarm="text" data-swarm-magnet="0" data-swarm-scout="off">DNP</p>
     <p class="lede">Move the cursor. The swarm follows it. Go near the word or a button: the closer you get, the more of the swarm leaves the hive and runs along the letter outlines or the button border.</p>
     <div class="row">
       <button class="btn" data-swarm="border" data-swarm-magnet="0.22">Get started</button>
@@ -92,6 +106,7 @@
       <button class="btn link" data-swarm="border" data-swarm-magnet="0.15">Text link</button>
       <button class="btn cta" data-swarm="border" data-swarm-magnet="0.18">Start now</button>
     </div>
+    <button class="egg" data-swarm="shape" data-swarm-shape="egg" data-swarm-magnet="0" data-swarm-scout="off" aria-label="Easter egg"></button>
   </section>
 
   <section class="light">

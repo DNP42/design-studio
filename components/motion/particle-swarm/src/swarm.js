@@ -4,6 +4,9 @@
  * Element attributes:
  *   data-swarm="border"   particles travel along the border (rounded corners too)
  *   data-swarm="text"     particles travel along the glyph outlines of the element's text (one line)
+ *   data-swarm="shape"    particles draw a generated shape centred on the element: data-swarm-shape="egg"
+ *                         (a click cycles the design; data-swarm-design="n" picks the start)
+ *   data-swarm-scout="off"  scouts skip this element (for a target that must stay hidden)
  * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
  *   data-swarm-path="offset"  text path style: border (on the outline) | offset (pushed out 5px) | shadow (shifted down-right)
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
@@ -126,6 +129,37 @@
       Object.assign(e, outline(data, w, h));
     }
 
+    // A closed loop (flat x,y list) resampled to 1 px steps by arc length; appends to pts and records start and length.
+    function resample(loop, pts, starts, lens, half) {
+      const n = loop.length / 2, cum = [0];
+      for (let j = 0; j < n; j++) {
+        const a = j * 2, b = ((j + 1) % n) * 2;
+        cum.push(cum[j] + Math.hypot(loop[b] - loop[a], loop[b + 1] - loop[a + 1]));
+      }
+      const L = cum[n], M = Math.floor(L);
+      if (M < 2) return 0;
+      starts.push(pts.length / 2); lens.push(M);
+      for (let s = 0, j = 0; s < M; s++) {
+        const u = s * L / M;
+        while (cum[j + 1] <= u) j++;
+        const f = (u - cum[j]) / (cum[j + 1] - cum[j]), a = j * 2, b = ((j + 1) % n) * 2;
+        pts.push(loop[a] + (loop[b] - loop[a]) * f + half, loop[a + 1] + (loop[b + 1] - loop[a + 1]) * f + half);
+      }
+      return M;
+    }
+
+    // Unit normals of the loop that starts at point s0; flip(px, py, nx, ny) says when one points the wrong way.
+    function normals(pts, s0, M, nrm, flip) {
+      for (let s = 0; s < M; s++) {
+        const a = (s0 + (s + M - 1) % M) * 2, b = (s0 + (s + 1) % M) * 2;
+        let nx = pts[b + 1] - pts[a + 1], ny = pts[a] - pts[b];
+        const l = Math.hypot(nx, ny) || 1;
+        nx /= l; ny /= l;
+        if (flip(pts[(s0 + s) * 2], pts[(s0 + s) * 2 + 1], nx, ny)) { nx = -nx; ny = -ny; }
+        nrm.push(nx, ny);
+      }
+    }
+
     // Glyph outlines: edge pixels chained into loops, each resampled to 1 px steps by arc length.
     // A greedy walk that prefers to go straight is shorter than Moore tracing and good enough here.
     function outline(data, w, h) {
@@ -152,31 +186,72 @@
         }
         const n = loop.length / 2;
         if (n < 24) continue;                                   // specks and scraps
-        const cum = [0];
-        for (let j = 0; j < n; j++) {
-          const a = j * 2, b = ((j + 1) % n) * 2;
-          cum.push(cum[j] + Math.hypot(loop[b] - loop[a], loop[b + 1] - loop[a + 1]));
-        }
-        const L = cum[n], M = Math.floor(L);
-        starts.push(pts.length / 2); lens.push(M);
-        for (let s = 0, j = 0; s < M; s++) {
-          const u = s * L / M;
-          while (cum[j + 1] <= u) j++;
-          const f = (u - cum[j]) / (cum[j + 1] - cum[j]), a = j * 2, b = ((j + 1) % n) * 2;
-          pts.push(loop[a] + (loop[b] - loop[a]) * f + 0.5, loop[a + 1] + (loop[b + 1] - loop[a + 1]) * f + 0.5);
-        }
-        const s0 = starts[starts.length - 1];
-        for (let s = 0; s < M; s++) {
-          const a = (s0 + (s + M - 1) % M) * 2, b = (s0 + (s + 1) % M) * 2;
-          let nx = pts[b + 1] - pts[a + 1], ny = pts[a] - pts[b];
-          const l = Math.hypot(nx, ny) || 1;
-          nx /= l; ny /= l;
-          const px = pts[(s0 + s) * 2], py = pts[(s0 + s) * 2 + 1];
-          if (on(Math.floor(px + nx * 2), Math.floor(py + ny * 2))) { nx = -nx; ny = -ny; }   // point out of the glyph
-          nrm.push(nx, ny);
-        }
+        const M = resample(loop, pts, starts, lens, 0.5);
+        // point out of the glyph
+        if (M) normals(pts, starts[starts.length - 1], M, nrm, (px, py, nx, ny) => on(Math.floor(px + nx * 2), Math.floor(py + ny * 2)));
       }
       return pts.length ? { pts: Float32Array.from(pts), nrm: Float32Array.from(nrm), starts, lens, total: pts.length / 2 } : { pts: null };
+    }
+
+    // Generated shapes: a design is (w, h) => loops of { p: flat x,y list around the centre, closed }.
+    // An open line is walked there and back, so the particles never jump from its end to its start.
+    const ring = (x, y, r, n) => { const p = []; for (let i = 0; i < n; i++) p.push(x + r * Math.cos(i / n * TAU), y + r * Math.sin(i / n * TAU)); return { p, closed: true }; };
+    const line = (...p) => ({ p, closed: false });
+    // Egg, b = half height: x = 0.68 b sin(t) (1 - 0.12 cos(t)), y = -b cos(t). The top (t = 0) is the narrow end.
+    const eggHalf = (b, y) => { const c = -y / b; return 0.68 * b * Math.sqrt(1 - c * c) * (1 - 0.12 * c); };
+    const eggOutline = b => {
+      const p = [];
+      for (let i = 0; i < 120; i++) { const a = i / 120 * TAU; p.push(0.68 * b * Math.sin(a) * (1 - 0.12 * Math.cos(a)), -b * Math.cos(a)); }
+      return { p, closed: true };
+    };
+    const EGG_DECOR = [
+      () => [],                                                                           // plain
+      b => [-0.5, -0.15, 0.2, 0.55].map(f => { const hw = eggHalf(b, f * b) * 0.92; return line(-hw, f * b, hw, f * b); }),   // stripes
+      b => {                                                                              // dots, in staggered rows
+        const out = [], dx = 0.42 * b;
+        for (let j = 0; j < 5; j++) {
+          const y = b * (-0.6 + 0.36 * j), lim = eggHalf(b, y) * 0.72;
+          for (let i = -4; i <= 4; i++) { const x = (i + 0.5 * (j % 2)) * dx; if (Math.abs(x) <= lim) out.push(ring(x, y, 0.075 * b, 16)); }
+        }
+        return out;
+      },
+      b => {                                                                              // zigzag between two bands
+        const y0 = -0.2 * b, y1 = 0.2 * b, ht = eggHalf(b, y0) * 0.9, hb = eggHalf(b, y1) * 0.9, zig = [];
+        for (let i = 0; i <= 8; i++) zig.push(-ht + i * ht / 4, i % 2 ? y1 : y0);
+        return [line(-ht, y0, ht, y0), line(-hb, y1, hb, y1), line(...zig)];
+      },
+      b => [-0.4, 0.05, 0.5].map(f => {                                                   // waves
+        const y0 = f * b, amp = 0.07 * b, hw = Math.min(eggHalf(b, y0 - amp), eggHalf(b, y0 + amp)) * 0.9, p = [];
+        for (let i = 0; i <= 32; i++) p.push(-hw + i * hw / 16, y0 + amp * Math.sin(i / 32 * 4 * Math.PI));
+        return line(...p);
+      }),
+    ];
+    const SHAPES = { egg: EGG_DECOR.map(d => (w, h) => [eggOutline(1.25 * h), ...d(1.25 * h)]) };   // egg height 2.5 x the element
+
+    function buildShape(e) {
+      const r = baseRect(e), make = SHAPES[e.shape];
+      e.pts = null;
+      if (!make || !r.width || !r.height) return;
+      const pts = [], nrm = [], starts = [], lens = [];
+      for (const lp of make[e.design % make.length](r.width, r.height)) {
+        const back = [];
+        if (!lp.closed) for (let i = lp.p.length - 4; i >= 2; i -= 2) back.push(lp.p[i], lp.p[i + 1]);
+        const loop = lp.p.concat(back);
+        let area = 0;
+        for (let i = 0; i < loop.length; i += 2) {
+          const j = (i + 2) % loop.length;
+          area += loop[i] * loop[j + 1] - loop[j] * loop[i + 1];
+          loop[i] += r.width / 2; loop[i + 1] += r.height / 2;
+        }
+        const M = resample(loop, pts, starts, lens, 0);
+        if (M) normals(pts, starts[starts.length - 1], M, nrm, () => area < 0);       // outward for a clockwise loop
+      }
+      Object.assign(e, pts.length ? { pts: Float32Array.from(pts), nrm: Float32Array.from(nrm), starts, lens, total: pts.length / 2 } : { pts: null });
+    }
+
+    function sample(e) {
+      if (e.kind === 'text') sampleText(e);
+      else if (e.kind === 'shape') buildShape(e);
     }
 
     // A point on the outlines. p0 in [0,total) picks the loop and the start; adv moves along that loop.
@@ -191,12 +266,13 @@
     }
 
     function scan() {
-      els.forEach(e => { e.el.style.translate = ''; e.el.style.removeProperty('--swarm'); });
+      els.forEach(e => { e.el.style.translate = ''; e.el.style.removeProperty('--swarm'); if (e.off) e.off(); });
       els = [...document.querySelectorAll(o.selector)].map(el => {
         const cs = getComputedStyle(el);
         const m = parseFloat(el.dataset.swarmMagnet);
         return {
-          el, kind: el.dataset.swarm === 'text' ? 'text' : 'border',
+          el, kind: ['text', 'shape'].includes(el.dataset.swarm) ? el.dataset.swarm : 'border',
+          shape: el.dataset.swarmShape, design: parseInt(el.dataset.swarmDesign) || 0, quiet: el.dataset.swarmScout === 'off', off: null,
           magnet: calm || isNaN(m) ? o.magnet : m,
           path: el.dataset.swarmPath || o.textPath,
           rgb: toRGB(cs.getPropertyValue('--swarm-color').trim() || o.color),
@@ -204,7 +280,17 @@
         };
       });
       els.forEach(readRadius);
-      els.forEach(e => e.kind === 'text' && sampleText(e));
+      els.forEach(sample);
+      els.forEach(e => {                                    // a click on a shape cycles to its next design
+        if (e.kind !== 'shape') return;
+        const next = () => {
+          e.design = (e.design + 1) % (SHAPES[e.shape] || [0]).length;
+          e.el.dataset.swarmDesign = e.design;
+          buildShape(e);
+        };
+        e.el.addEventListener('click', next);
+        e.off = () => e.el.removeEventListener('click', next);
+      });
     }
 
     function readRadius(e) { e.rad = parseFloat(getComputedStyle(e.el).borderTopLeftRadius) || 0; }
@@ -215,7 +301,7 @@
       cvs.width = W * dpr; cvs.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       els.forEach(readRadius);
-      els.forEach(e => e.kind === 'text' && sampleText(e));
+      els.forEach(sample);
     }
 
     // A point on a rounded rectangle at s in [0,1), clockwise from the top-left, with its outward normal.
@@ -268,7 +354,7 @@
         const bo = e.box = { x: r.left + e.tx, y: r.top + e.ty, w: r.width, h: r.height };
         e.r = Math.min(e.rad, bo.w / 2, bo.h / 2);
         // A scout visits only a near, calm element that is on screen, so it never leaves the canvas.
-        e.scout = e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
+        e.scout = !e.quiet && e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
         if (e.k > best) { best = e.k; act = e; }
       }
       // Style writes come after all rect reads (one layout flush), and only when a value changed.
@@ -300,7 +386,7 @@
         rad = act.r;
         plen = Math.max(1, 2 * (bw + bh) - 8 * rad + TAU * rad);
       }
-      const pts = act && act.kind === 'text' ? act.pts : null;
+      const pts = act && act.kind !== 'border' ? act.pts : null;
       const damp = Math.pow(0.8, dt);
       const every = o.scouts > 0 ? Math.max(1, Math.round(1 / o.scouts)) : 0;
       const sz = o.size, gl = o.glow, pathAdv = t * o.pathSpeed;
@@ -324,7 +410,7 @@
           let ex, ey;
           if (pts) {                                        // travel a glyph contour at a constant tangent speed
             onOutline(act, U[i] * act.total, pathAdv, tmp);
-            const [sx, sy, lift] = TEXT_PATHS[act.path] || TEXT_PATHS.border;
+            const [sx, sy, lift] = TEXT_PATHS[act.kind === 'text' ? act.path : 'border'] || TEXT_PATHS.border;
             ex = bx + tmp[0] + tmp[2] * lift + sx + (R[i] - 0.5) * 1.5;
             ey = by + tmp[1] + tmp[3] * lift + sy + (Q[i] - 0.5) * 1.5;
           } else {                                          // travel the border at a constant tangent speed
@@ -417,7 +503,7 @@
       addEventListener('pointerdown', onMove, { passive: true });
       document.documentElement.addEventListener('pointerleave', onLeave);
       addEventListener('resize', onResize);
-      if (document.fonts) document.fonts.ready.then(() => els.forEach(e => e.kind === 'text' && sampleText(e)));
+      if (document.fonts) document.fonts.ready.then(() => els.forEach(sample));
       raf = requestAnimationFrame(frame);
     }
 
@@ -447,7 +533,7 @@
         removeEventListener('pointerdown', onMove);
         document.documentElement.removeEventListener('pointerleave', onLeave);
         removeEventListener('resize', onResize);
-        els.forEach(e => { e.el.style.translate = ''; e.el.style.removeProperty('--swarm'); e.el.classList.remove('is-swarmed'); });
+        els.forEach(e => { e.el.style.translate = ''; e.el.style.removeProperty('--swarm'); e.el.classList.remove('is-swarmed'); if (e.off) e.off(); });
         cvs.remove();
       },
     };
