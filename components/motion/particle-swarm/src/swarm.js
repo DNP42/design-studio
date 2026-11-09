@@ -25,7 +25,7 @@
       mode: 'glow',        // 'glow' (additive light) | 'contrast' (difference blend, inverts what is under it)
       field: 90,           // px around an element where the pull starts
       magnet: 0.15,        // default lean toward the cursor
-      trail: 0.3,          // fade per frame: lower = longer trails
+      trail: 0.3,          // tail length: lower = longer tails
       selector: '[data-swarm]',
       reducedMotion: 'calm', // with prefers-reduced-motion: 'calm' (30% count, no drift, no lean) | 'off'
     }, opts || {});
@@ -53,7 +53,7 @@
     }
 
     let W = 0, H = 0;
-    let N, X, Y, VX, VY, PH, K, S, U;
+    let N, X, Y, VX, VY, PH, K, S, U, R;
     let els = [];
     let mx = innerWidth / 2, my = innerHeight / 2, cx = mx, cy = my;
     let has = false, t = 0, last = performance.now(), raf = 0;
@@ -67,6 +67,7 @@
       VX = new Float32Array(n); VY = new Float32Array(n);
       PH = new Float32Array(n);
       K = new Float32Array(n); S = new Float32Array(n); U = new Float32Array(n);
+      R = new Float32Array(n);
       for (let i = 0; i < n; i++) {
         X[i] = cx + (Math.random() - 0.5) * 200;
         Y[i] = cy + (Math.random() - 0.5) * 200;
@@ -74,6 +75,7 @@
         K[i] = 0.02 + Math.random() * 0.015;                 // spring stiffness: low = lags behind
         S[i] = 0.6 + Math.random() * 1.3;
         U[i] = Math.random();                                 // slot on a border
+        R[i] = Math.random();                                 // look: halo size and brightness
       }
     }
 
@@ -247,25 +249,45 @@
         Y[i] += VY[i] * dt;
       }
 
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = `rgba(0,0,0,${o.trail})`;
-      ctx.fillRect(0, 0, W, H);
+      ctx.clearRect(0, 0, W, H);                              // a destination-out fade leaves 8-bit alpha residue
       ctx.globalCompositeOperation = 'lighter';
       const [r, g, b] = o.mode === 'contrast' ? [255, 255, 255] : col.map(Math.round);
+      const rgb = `${r},${g},${b}`;
 
-      ctx.fillStyle = `rgba(${r},${g},${b},${0.05 + 0.07 * k})`;
+      // Halos: small and uneven. Two alpha buckets (two fills); some particles get no halo.
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.fillStyle = `rgba(${rgb},${(pass ? 0.05 : 0.025) + 0.03 * k})`;
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          const q = R[i];
+          if (q < 0.45 || (q < 0.75) !== !pass) continue;
+          const rr = 0.4 + S[i] * 1.1;
+          ctx.moveTo(X[i] + rr, Y[i]);
+          ctx.arc(X[i], Y[i], rr, 0, TAU);
+        }
+        ctx.fill();
+      }
+
+      // Tails: a dim copy behind each particle, along its velocity.
+      const tail = 1 + (1 - o.trail) * 5;
+      ctx.fillStyle = `rgba(${rgb},${0.18 + 0.2 * k})`;
       ctx.beginPath();
       for (let i = 0; i < N; i++) {
-        const rr = S[i] * 3.2;
-        ctx.moveTo(X[i] + rr, Y[i]);
-        ctx.arc(X[i], Y[i], rr, 0, TAU);
+        const z = 0.5 + S[i] * 0.5;
+        ctx.rect(X[i] - VX[i] * tail - z / 2, Y[i] - VY[i] * tail - z / 2, z, z);
       }
       ctx.fill();
 
-      ctx.fillStyle = `rgba(${r},${g},${b},${0.65 + 0.35 * k})`;
-      ctx.beginPath();
-      for (let i = 0; i < N; i++) ctx.rect(X[i] - S[i] / 2, Y[i] - S[i] / 2, S[i], S[i]);
-      ctx.fill();
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.fillStyle = `rgba(${rgb},${(pass ? 0.85 : 0.55) + 0.15 * k})`;
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          if ((R[i] < 0.5) === !!pass) continue;
+          const z = 0.5 + S[i] * 0.5;
+          ctx.rect(X[i] - z / 2, Y[i] - z / 2, z, z);
+        }
+        ctx.fill();
+      }
 
       raf = requestAnimationFrame(frame);
     }
@@ -278,6 +300,7 @@
     function setMode(mode) {
       o.mode = mode;
       cvs.style.mixBlendMode = mode === 'contrast' ? 'difference' : 'normal';
+      ctx.clearRect(0, 0, W, H);                             // old glow pixels must not be difference-blended
     }
 
     alloc(off ? 0 : o.count);
