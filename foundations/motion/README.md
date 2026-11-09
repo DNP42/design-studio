@@ -19,14 +19,22 @@ Tokens: [`tokens.css`](tokens.css).
 
 ## Example
 ```css
+/* Closed state: this transition runs on exit. */
 .toast {
   opacity: 0;
   transform: translateY(var(--motion-distance-md));
   transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-exit),
+    transform var(--motion-duration-fast) var(--motion-ease-exit);
+}
+/* Open state: this transition runs on enter. */
+.toast[data-open] {
+  opacity: 1;
+  transform: none;
+  transition:
     opacity var(--motion-duration-base) var(--motion-ease-enter),
     transform var(--motion-duration-base) var(--motion-ease-enter);
 }
-.toast[data-open] { opacity: 1; transform: none; }
 ```
 
 ## Light 3D accents (optional)

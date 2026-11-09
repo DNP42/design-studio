@@ -10,7 +10,7 @@ Copy this list into every product PR. Tick each line, or write why it does not a
 - [ ] At 320px width, the page has no horizontal scroll (WCAG 1.4.10).
 - [ ] With the browser font set to "Very large", nothing clips or overlaps.
 - [ ] `<html lang>` matches the page language (`en`, `sl`). A text in another language has its own `lang`.
-- [ ] Text uses short sentences and plain words. Each button says what it does ("Download QR code", not "OK").
+- [ ] No sentence in the UI has more than 20 words. Each button label is a verb and an object ("Download QR code", not "OK").
 
 ## Touch and click
 - [ ] Each button, link and control is 44 × 44 CSS px or larger, with 8px or more between targets.
@@ -20,12 +20,14 @@ Copy this list into every product PR. Tick each line, or write why it does not a
 ## Keyboard and focus
 - [ ] Every action works with the keyboard alone. The order follows the visual order. Focus is never trapped.
 - [ ] The focus ring is visible on every control: 2px or more, `--color-focus`, never removed. Use `:focus-visible`.
+- [ ] A sticky header or banner never hides the focused control (WCAG 2.4.11).
 - [ ] A dialog moves focus into it, closes with Escape, and returns focus to the control that opened it.
 
 ## Forms and errors
 - [ ] Every input has a visible label. A placeholder is not a label.
 - [ ] An error shows as text next to its field, says how to fix it, and has an icon or word, not only colour.
-- [ ] The app keeps what the user typed after an error.
+- [ ] The app keeps what the user typed after an error, and never asks for the same data twice in one flow (WCAG 3.3.7).
+- [ ] Sign-in needs no puzzle or memory test. Paste and password managers work (WCAG 3.3.8).
 - [ ] An action that deletes or cannot be undone asks first, or offers Undo.
 
 ## Screen readers
@@ -43,8 +45,9 @@ Copy this list into every product PR. Tick each line, or write why it does not a
 ## Consistency
 - [ ] Navigation, the language switch and the sound toggle are in the same place on every page.
 - [ ] The same control has the same name and icon on every page.
+- [ ] Help or contact, when the product has it, is in the same place on every page (WCAG 3.2.6).
 
 ## Test before you open the PR
-- [ ] Lighthouse accessibility score is 100. ([performance](../performance/README.md))
+- [ ] Lighthouse accessibility score is 100. This is necessary but not enough: Lighthouse does not test most WCAG 2.2 criteria, so do every manual check above. ([performance](../performance/README.md))
 - [ ] Use the main task once with VoiceOver (macOS: Cmd+F5) and once with the keyboard only.
 - [ ] Use the main task once on a phone at 320px width with reduced motion on.
