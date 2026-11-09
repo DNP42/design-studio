@@ -17,6 +17,7 @@
   const HIVE_RADIUS = 70;
   const SCOUT_EVERY = 12;                         // one particle in 12 is a scout
   const SCOUT_RANGE = 600;
+  const PATH_SPEED = 90;                          // px per second along an outline
 
   function createSwarm(opts) {
     const o = Object.assign({
@@ -53,7 +54,7 @@
     }
 
     let W = 0, H = 0;
-    let N, X, Y, VX, VY, PH, K, S, U, R;
+    let N, X, Y, VX, VY, PH, K, S, U, R, Q;
     let els = [];
     let mx = innerWidth / 2, my = innerHeight / 2, cx = mx, cy = my;
     let has = false, t = 0, last = performance.now(), raf = 0;
@@ -67,7 +68,7 @@
       VX = new Float32Array(n); VY = new Float32Array(n);
       PH = new Float32Array(n);
       K = new Float32Array(n); S = new Float32Array(n); U = new Float32Array(n);
-      R = new Float32Array(n);
+      R = new Float32Array(n); Q = new Float32Array(n);
       for (let i = 0; i < n; i++) {
         X[i] = cx + (Math.random() - 0.5) * 200;
         Y[i] = cy + (Math.random() - 0.5) * 200;
@@ -76,6 +77,7 @@
         S[i] = 0.6 + Math.random() * 1.3;
         U[i] = Math.random();                                 // slot on a border
         R[i] = Math.random();                                 // look: halo size and brightness
+        Q[i] = Math.random();                                 // rank: leaves the hive when share > Q
       }
     }
 
@@ -201,13 +203,15 @@
       const tc = act ? act.rgb : base;
       for (let c = 0; c < 3; c++) col[c] += (base[c] + (tc[c] - base[c]) * best - col[c]) * Math.min(1, 0.1 * dt);
 
-      // Attach a share of the swarm to the active element; the rest stays on the cursor.
+      // The share of the swarm on the element grows with closeness: about N*share particles leave the hive
+      // (k is already eased, squared so only a close or over cursor takes many). The rest stay in the hive.
       const k = best;
-      const m = act ? Math.floor(N * (act.kind === 'text' ? 1 : 0.8)) : 0;
-      let bx = 0, by = 0, bw = 0, bh = 0, rad = 0;
+      const share = k * k;
+      let bx = 0, by = 0, bw = 0, bh = 0, rad = 0, plen = 1;
       if (act) {
         ({ x: bx, y: by, w: bw, h: bh } = act.box);
         rad = Math.min(parseFloat(getComputedStyle(act.el).borderTopLeftRadius) || 0, bw / 2, bh / 2);
+        plen = 2 * (bw + bh) - 8 * rad + TAU * rad;
       }
       const pts = act && act.kind === 'text' ? act.pts : null;
       const damp = Math.pow(0.8, dt);
@@ -225,23 +229,21 @@
           tx += (tmp[0] - tx) * out;
           ty += (tmp[1] - ty) * out;
         }
-        if (i < m && k > 0) {
+        if (act && i % SCOUT_EVERY !== 0 && Q[i] < share) {  // on the path: spring fully onto it, no blend
           let ex, ey;
           if (pts) {
             const j = (i % (pts.length >> 1)) << 1;
             ex = bx + pts[j] + Math.sin(t * 2.3 + PH[i] * 7) * 1.2;
             ey = by + pts[j + 1] + Math.cos(t * 1.9 + PH[i] * 5) * 1.2;
-          } else {
-            perim(bx, by, bw, bh, rad, U[i] + t * 0.05, tmp);
-            const ddx = tmp[0] - cx, ddy = tmp[1] - cy;
-            const near = Math.exp(-(ddx * ddx + ddy * ddy) / 9800);    // the border bulges toward the cursor
-            const off = 2 + 3 * Math.sin(t * 3 + PH[i] * 5) + near * (10 + 14 * Math.sin(t * 6 + PH[i]) ** 2);
+          } else {                                          // travel the border at a constant tangent speed
+            perim(bx, by, bw, bh, rad, U[i] + t * PATH_SPEED / plen, tmp);
+            const off = (R[i] - 0.5) * 3 + Math.sin(t * 3 + PH[i] * 5) * 0.6;   // tight, a little random
             ex = tmp[0] + tmp[2] * off;
             ey = tmp[1] + tmp[3] * off;
           }
-          tx += (ex - tx) * k;
-          ty += (ey - ty) * k;
-          stiff += 0.05 * k;
+          tx = ex;
+          ty = ey;
+          stiff += 0.05;
         }
         VX[i] = (VX[i] + (tx - X[i]) * stiff * dt) * damp;
         VY[i] = (VY[i] + (ty - Y[i]) * stiff * dt) * damp;
