@@ -174,17 +174,21 @@
           el, kind: el.dataset.swarm === 'text' ? 'text' : 'border',
           magnet: calm || isNaN(m) ? o.magnet : m,
           rgb: toRGB(cs.getPropertyValue('--swarm-color').trim() || o.color),
-          k: 0, tx: 0, ty: 0, pts: null,
+          k: 0, tx: 0, ty: 0, pts: null, rad: 0, r: 0, scout: false,
         };
       });
+      els.forEach(readRadius);
       els.forEach(e => e.kind === 'text' && sampleText(e));
     }
+
+    function readRadius(e) { e.rad = parseFloat(getComputedStyle(e.el).borderTopLeftRadius) || 0; }
 
     function resize() {
       const dpr = Math.min(devicePixelRatio || 1, 2);
       W = innerWidth; H = innerHeight;
       cvs.width = W * dpr; cvs.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      els.forEach(readRadius);
       els.forEach(e => e.kind === 'text' && sampleText(e));
     }
 
@@ -235,11 +239,13 @@
         e.el.style.translate = e.k ? `${e.tx.toFixed(2)}px ${e.ty.toFixed(2)}px` : '';
         e.el.style.setProperty('--swarm', e.k.toFixed(3));
         e.el.classList.toggle('is-swarmed', e.k > 0.5);
-        e.box = { x: r.left + e.tx, y: r.top + e.ty, w: r.width, h: r.height };
+        const bo = e.box = { x: r.left + e.tx, y: r.top + e.ty, w: r.width, h: r.height };
+        e.r = Math.min(e.rad, bo.w / 2, bo.h / 2);
+        // A scout visits only a near, calm element that is on screen, so it never leaves the canvas.
+        e.scout = e.d < SCOUT_RANGE && e.k < 0.3 && bo.x < W && bo.x + bo.w > 0 && bo.y < H && bo.y + bo.h > 0;
         if (e.k > best) { best = e.k; act = e; }
       }
 
-      const scouts = els.filter(e => e.d < SCOUT_RANGE && e.k < 0.3).map(e => e.box);
       const spacing = HIVE_RADIUS / Math.sqrt(Math.max(N, 1));
 
       const tc = act ? act.rgb : base;
@@ -252,7 +258,7 @@
       let bx = 0, by = 0, bw = 0, bh = 0, rad = 0, plen = 1;
       if (act) {
         ({ x: bx, y: by, w: bw, h: bh } = act.box);
-        rad = Math.min(parseFloat(getComputedStyle(act.el).borderTopLeftRadius) || 0, bw / 2, bh / 2);
+        rad = act.r;
         plen = 2 * (bw + bh) - 8 * rad + TAU * rad;
       }
       const pts = act && act.kind === 'text' ? act.pts : null;
@@ -264,10 +270,12 @@
         let tx = cx + Math.cos(a) * ring;
         let ty = cy + Math.sin(a) * ring;
         let stiff = K[i];
-        if (i % SCOUT_EVERY === 0 && scouts.length) {      // scouts fly out to nearby elements and back to report
-          const s = scouts[(i / SCOUT_EVERY) % scouts.length];
+        // Scouts fly out to a nearby element and back to report. Each keeps its own element for good;
+        // when that one is far, off screen or busy, the scout stays home.
+        const s = i % SCOUT_EVERY === 0 && els.length ? els[(i / SCOUT_EVERY) % els.length] : null;
+        if (s && s.scout) {
           const out = 0.5 - 0.5 * Math.cos(((t * 0.3 + PH[i] / TAU) % 1) * TAU);
-          perim(s.x, s.y, s.w, s.h, 0, U[i], tmp);
+          perim(s.box.x, s.box.y, s.box.w, s.box.h, s.r, U[i], tmp);
           tx += (tmp[0] - tx) * out;
           ty += (tmp[1] - ty) * out;
         }
