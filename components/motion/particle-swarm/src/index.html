@@ -56,6 +56,17 @@
   .controls button[aria-pressed="true"] { background: #ffffff1f; }
   .controls select { background: #ffffff0f; }
   .controls input[type=color] { width: 34px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+
+  .tune {
+    position: fixed; z-index: 10001; left: 50%; bottom: 70px; translate: -50% 0;
+    width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 100px); overflow: auto;
+    padding: 12px 14px; border-radius: 16px; background: #0d1118f2; border: 1px solid var(--line);
+    backdrop-filter: blur(8px); color: var(--fg); font-size: 13px; touch-action: pan-y;
+  }
+  .tune[hidden] { display: none; }
+  .tune label { display: grid; grid-template-columns: 7.5em 1fr 3.5em; align-items: center; gap: 8px; padding: 5px 0; }
+  .tune output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tune input[type=range] { width: 100%; min-width: 0; accent-color: #7cf7ff; }
 </style>
 </head>
 <body>
@@ -90,7 +101,9 @@
       <option value="shadow">Shadow</option>
     </select>
     <input type="color" value="#ffd36e" aria-label="Swarm colour">
+    <button type="button" id="tune-btn" aria-expanded="false" aria-controls="tune">Tune</button>
   </div>
+  <div class="tune" id="tune" role="group" aria-label="Tune the swarm" hidden></div>
 
   <script src="swarm.js"></script>
   <script>
@@ -100,9 +113,38 @@
       swarm.setMode(b.dataset.mode);
       modeBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     }));
-    document.querySelector('.controls select').addEventListener('change', e => swarm.setCount(+e.target.value));
+    const countSel = document.querySelector('.controls select');
+    countSel.addEventListener('change', e => { swarm.setCount(+e.target.value); sliders.count.sync(+e.target.value); });
     document.querySelector('[aria-label="Text path"]').addEventListener('change', e => swarm.setPath(e.target.value));
     document.querySelector('.controls input[type=color]').addEventListener('input', e => swarm.setColor(e.target.value));
+
+    // Tune panel: [option, label, min, max, step]. Defaults come from the swarm itself.
+    const TUNE = [
+      ['count', 'Count', 100, 2000, 50], ['spacing', 'Hive radius', 8, 80, 1], ['size', 'Size', 0.3, 3, 0.1],
+      ['orbit', 'Orbit speed', 0, 4, 0.1], ['stiffness', 'Stiffness', 0.2, 3, 0.1], ['scouts', 'Scout ratio', 0, 0.5, 0.01],
+      ['field', 'Pull radius', 20, 300, 5], ['pathSpeed', 'Path speed', 10, 400, 5], ['curve', 'Share curve', 0.5, 4, 0.1],
+      ['glow', 'Glow', 0, 3, 0.1],
+    ];
+    const tune = document.getElementById('tune'), cur = swarm.get(), sliders = {};
+    TUNE.forEach(([key, label, min, max, step]) => {
+      const l = document.createElement('label');
+      l.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
+      const input = l.children[1], out = l.children[2];
+      const sync = v => { input.value = v; out.textContent = +(+v).toFixed(2); };
+      input.addEventListener('input', () => {
+        swarm.set({ [key]: +input.value }); sync(input.value);
+        if (key === 'count') countSel.value = input.value;       // blank when it matches no option
+      });
+      sync(cur[key]);
+      sliders[key] = { sync };
+      tune.appendChild(l);
+    });
+    const tuneBtn = document.getElementById('tune-btn');
+    tuneBtn.addEventListener('click', () => {
+      tune.hidden = !tune.hidden;
+      tuneBtn.setAttribute('aria-expanded', String(!tune.hidden));
+      tuneBtn.setAttribute('aria-pressed', String(!tune.hidden));
+    });
   </script>
 </body>
 </html>

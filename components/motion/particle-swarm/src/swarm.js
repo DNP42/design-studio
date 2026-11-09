@@ -7,6 +7,7 @@
  * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
  *   data-swarm-path="offset"  text path style: border (on the outline) | offset (pushed out 5px) | shadow (shifted down-right)
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
+ * Live tuning: swarm.set({ spacing, size, orbit, stiffness, scouts, field, pathSpeed, curve, glow, count, ... }).
  * CSS on the element:
  *   --swarm-color         swarm tint while it holds this element
  *   --swarm               written by the script, 0..1, use it in your own CSS
@@ -16,10 +17,7 @@
 
   const TAU = Math.PI * 2;
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));   // golden angle: an even, comb-like disc
-  const HIVE_RADIUS = 24;
-  const SCOUT_EVERY = 12;                         // one particle in 12 is a scout
   const SCOUT_RANGE = 600;
-  const PATH_SPEED = 90;                          // px per second along an outline
   const TEXT_PATHS = { border: [0, 0, 0], offset: [0, 0, 5], shadow: [4, 5, 0] };   // [shift x, shift y, push out] px
 
   function createSwarm(opts) {
@@ -27,7 +25,15 @@
       count: 700,
       color: '#7cf7ff',
       mode: 'glow',        // 'glow' (additive light) | 'contrast' (difference blend, inverts what is under it)
+      spacing: 24,         // hive radius in px at full focus (60% of it at rest)
+      size: 1,             // particle size scale (dots, halos, tails)
+      orbit: 1,            // hive orbit speed scale (0 = still)
+      stiffness: 1,        // follow tightness scale: low = lags behind the cursor
+      scouts: 1 / 12,      // share of particles that scout (0 = none)
       field: 90,           // px around an element where the pull starts
+      pathSpeed: 90,       // px per second along an outline
+      curve: 2,            // share of the swarm on the element = k^curve
+      glow: 1,             // alpha scale of dots, halos, tails and the queen
       magnet: 0.15,        // default lean toward the cursor
       trail: 0.3,          // tail length: lower = longer tails
       selector: '[data-swarm]',
@@ -250,7 +256,7 @@
         const dx = Math.max(r.left - cx, 0, cx - (r.left + r.width));
         const dy = Math.max(r.top - cy, 0, cy - (r.top + r.height));
         e.d = Math.hypot(dx, dy);
-        let g = Math.max(0, 1 - e.d / o.field);
+        let g = Math.max(0, 1 - e.d / Math.max(o.field, 1));
         g = g * g * (3 - 2 * g);
         e.k += (g - e.k) * Math.min(1, 0.12 * dt);
         if (e.k < 0.002) e.k = 0;
@@ -277,9 +283,9 @@
       const L = Math.min(N, Math.round(live));
       for (let i = L; i < N; i++) { X[i] = cx; Y[i] = cy; VX[i] = 0; VY[i] = 0; }
       // At rest the hive packs tighter; it loosens as an element takes focus.
-      const spacing = HIVE_RADIUS * (0.6 + 0.4 * best) / Math.sqrt(Math.max(L, 1));
+      const pitch = o.spacing * (0.6 + 0.4 * best) / Math.sqrt(Math.max(L, 1));
       // Angular speed drifts through zero, so the hive turns, eases and turns back.
-      spin += (1.1 * Math.sin(t * 0.37) + 0.5 * Math.sin(t * 0.91 + 1.7)) * dt / 60;
+      spin += (1.1 * Math.sin(t * 0.37) + 0.5 * Math.sin(t * 0.91 + 1.7)) * o.orbit * dt / 60;
 
       const tc = act ? act.rgb : base;
       for (let c = 0; c < 3; c++) col[c] += (base[c] + (tc[c] - base[c]) * best - col[c]) * Math.min(1, 0.1 * dt);
@@ -287,25 +293,27 @@
       // The share of the swarm on the element grows with closeness: about N*share particles leave the hive
       // (k is already eased, squared so only a close or over cursor takes many). The rest stay in the hive.
       const k = best;
-      const share = k * k;
+      const share = Math.pow(k, o.curve);
       let bx = 0, by = 0, bw = 0, bh = 0, rad = 0, plen = 1;
       if (act) {
         ({ x: bx, y: by, w: bw, h: bh } = act.box);
         rad = act.r;
-        plen = 2 * (bw + bh) - 8 * rad + TAU * rad;
+        plen = Math.max(1, 2 * (bw + bh) - 8 * rad + TAU * rad);
       }
       const pts = act && act.kind === 'text' ? act.pts : null;
       const damp = Math.pow(0.8, dt);
+      const every = o.scouts > 0 ? Math.max(1, Math.round(1 / o.scouts)) : 0;
+      const sz = o.size, gl = o.glow, pathAdv = t * o.pathSpeed;
 
       for (let i = 0; i < L; i++) {
         const a = i * GOLDEN + spin * (1.4 - 0.7 * Math.sqrt(i / L));   // inner rings turn faster: a fluid swirl
-        const ring = spacing * Math.sqrt(i) * (1 + 0.04 * Math.sin(t * 1.3 + i * 0.01));
+        const ring = pitch * Math.sqrt(i) * (1 + 0.04 * Math.sin(t * 1.3 + i * 0.01));
         let tx = cx + Math.cos(a) * ring;
         let ty = cy + Math.sin(a) * ring;
-        let stiff = K[i];
+        let stiff = K[i] * o.stiffness;
         // Scouts fly out to a nearby element and back to report. Each keeps its own element for good;
         // when that one is far, off screen or busy, the scout stays home.
-        const s = i % SCOUT_EVERY === 0 && els.length ? els[(i / SCOUT_EVERY) % els.length] : null;
+        const s = every && i % every === 0 && els.length ? els[(i / every) % els.length] : null;
         if (s && s.scout) {
           const out = 0.5 - 0.5 * Math.cos(((t * 0.3 + PH[i] / TAU) % 1) * TAU);
           perim(s.box.x, s.box.y, s.box.w, s.box.h, s.r, U[i], tmp);
@@ -315,12 +323,12 @@
         if (act && Q[i] < share) {  // on the path: spring fully onto it, no blend
           let ex, ey;
           if (pts) {                                        // travel a glyph contour at a constant tangent speed
-            onOutline(act, U[i] * act.total, t * PATH_SPEED, tmp);
+            onOutline(act, U[i] * act.total, pathAdv, tmp);
             const [sx, sy, lift] = TEXT_PATHS[act.path] || TEXT_PATHS.border;
             ex = bx + tmp[0] + tmp[2] * lift + sx + (R[i] - 0.5) * 1.5;
             ey = by + tmp[1] + tmp[3] * lift + sy + (Q[i] - 0.5) * 1.5;
           } else {                                          // travel the border at a constant tangent speed
-            perim(bx, by, bw, bh, rad, U[i] + t * PATH_SPEED / plen, tmp);
+            perim(bx, by, bw, bh, rad, U[i] + pathAdv / plen, tmp);
             const off = (R[i] - 0.5) * 3 + Math.sin(t * 3 + PH[i] * 5) * 0.6;   // tight, a little random
             ex = tmp[0] + tmp[2] * off;
             ey = tmp[1] + tmp[3] * off;
@@ -344,8 +352,8 @@
       if (k > 0.02) {
         const qr = 22 + 3 * Math.sin(t * 2.2);
         const qg = ctx.createRadialGradient(cx, cy, 0, cx, cy, qr);
-        qg.addColorStop(0, `rgba(${rgb},${0.5 * k})`);
-        qg.addColorStop(0.35, `rgba(${rgb},${0.18 * k})`);
+        qg.addColorStop(0, `rgba(${rgb},${0.5 * k * gl})`);
+        qg.addColorStop(0.35, `rgba(${rgb},${0.18 * k * gl})`);
         qg.addColorStop(1, `rgba(${rgb},0)`);
         ctx.fillStyle = qg;
         ctx.fillRect(cx - qr, cy - qr, qr * 2, qr * 2);
@@ -353,12 +361,12 @@
 
       // Halos: small and uneven. Two alpha buckets (two fills); some particles get no halo.
       for (let pass = 0; pass < 2; pass++) {
-        ctx.fillStyle = `rgba(${rgb},${(pass ? 0.05 : 0.025) + 0.03 * k})`;
+        ctx.fillStyle = `rgba(${rgb},${((pass ? 0.05 : 0.025) + 0.03 * k) * gl})`;
         ctx.beginPath();
         for (let i = 0; i < L; i++) {
           const q = R[i];
           if (q < 0.45 || (q < 0.75) !== !pass) continue;
-          const rr = 0.4 + S[i] * 1.1;
+          const rr = (0.4 + S[i] * 1.1) * sz;
           ctx.moveTo(X[i] + rr, Y[i]);
           ctx.arc(X[i], Y[i], rr, 0, TAU);
         }
@@ -367,20 +375,20 @@
 
       // Tails: a dim copy behind each particle, along its velocity.
       const tail = 1 + (1 - o.trail) * 5;
-      ctx.fillStyle = `rgba(${rgb},${0.18 + 0.2 * k})`;
+      ctx.fillStyle = `rgba(${rgb},${(0.18 + 0.2 * k) * gl})`;
       ctx.beginPath();
       for (let i = 0; i < L; i++) {
-        const z = 0.5 + S[i] * 0.5;
+        const z = (0.5 + S[i] * 0.5) * sz;
         ctx.rect(X[i] - VX[i] * tail - z / 2, Y[i] - VY[i] * tail - z / 2, z, z);
       }
       ctx.fill();
 
       for (let pass = 0; pass < 2; pass++) {
-        ctx.fillStyle = `rgba(${rgb},${(pass ? 0.85 : 0.55) + 0.15 * k})`;
+        ctx.fillStyle = `rgba(${rgb},${((pass ? 0.85 : 0.55) + 0.15 * k) * gl})`;
         ctx.beginPath();
         for (let i = 0; i < L; i++) {
           if ((R[i] < 0.5) === !!pass) continue;
-          const z = 0.5 + S[i] * 0.5;
+          const z = (0.5 + S[i] * 0.5) * sz;
           ctx.rect(X[i] - z / 2, Y[i] - z / 2, z, z);
         }
         ctx.fill();
@@ -413,19 +421,25 @@
       raf = requestAnimationFrame(frame);
     }
 
+    function setCount(n) { o.count = n; if (!off) alloc((calm ? Math.round(n * 0.3) : n) * 2); }
+    function setPath(style) {
+      o.textPath = style;
+      els.forEach(e => { e.path = e.el.dataset.swarmPath || style; });
+    }
+    // One colour for the swarm and every element; overrides per-element --swarm-color.
+    function setColor(c) {
+      const rgb = toRGB(c);
+      o.color = c;
+      base.splice(0, 3, ...rgb);
+      els.forEach(e => { e.rgb = rgb; e.el.style.setProperty('--swarm-color', c); });
+    }
+    // Options that need more than a store go through their setter; the rest are read every frame.
+    const SETTERS = { count: setCount, mode: setMode, textPath: setPath, color: setColor };
+
     return {
-      setMode,
-      setCount(n) { if (!off) alloc((calm ? Math.round(n * 0.3) : n) * 2); },
-      // One colour for the swarm and every element; overrides per-element --swarm-color.
-      setPath(style) {
-        o.textPath = style;
-        els.forEach(e => { e.path = e.el.dataset.swarmPath || style; });
-      },
-      setColor(c) {
-        const rgb = toRGB(c);
-        base.splice(0, 3, ...rgb);
-        els.forEach(e => { e.rgb = rgb; e.el.style.setProperty('--swarm-color', c); });
-      },
+      setMode, setCount, setPath, setColor,
+      set(part) { for (const key in part) (SETTERS[key] || (v => { o[key] = v; }))(part[key]); },
+      get: () => Object.assign({}, o),
       refresh: scan,
       destroy() {
         cancelAnimationFrame(raf);
