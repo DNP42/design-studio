@@ -15,7 +15,7 @@
 
   const TAU = Math.PI * 2;
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));   // golden angle: an even, comb-like disc
-  const HIVE_RADIUS = 38;
+  const HIVE_RADIUS = 24;
   const SCOUT_EVERY = 12;                         // one particle in 12 is a scout
   const SCOUT_RANGE = 600;
   const PATH_SPEED = 90;                          // px per second along an outline
@@ -56,6 +56,7 @@
 
     let W = 0, H = 0;
     let N, X, Y, VX, VY, PH, K, S, U, R, Q;
+    let live = 0, spin = 0;
     let els = [];
     let mx = innerWidth / 2, my = innerHeight / 2, cx = mx, cy = my;
     let has = false, t = 0, last = performance.now(), raf = 0;
@@ -252,7 +253,13 @@
         if (e.wOn !== e.cOn) e.el.classList.toggle('is-swarmed', e.cOn = e.wOn);
       }
 
-      const spacing = HIVE_RADIUS / Math.sqrt(Math.max(N, 1));
+      // The pool holds twice the count; focus brings the second half out of the hive centre.
+      live += ((N / 2) * (1 + best) - live) * Math.min(1, 0.08 * dt);
+      const L = Math.min(N, Math.round(live));
+      for (let i = L; i < N; i++) { X[i] = cx; Y[i] = cy; VX[i] = 0; VY[i] = 0; }
+      const spacing = HIVE_RADIUS / Math.sqrt(Math.max(L, 1));
+      // Angular speed drifts through zero, so the hive turns, eases and turns back.
+      spin += (1.1 * Math.sin(t * 0.37) + 0.5 * Math.sin(t * 0.91 + 1.7)) * dt / 60;
 
       const tc = act ? act.rgb : base;
       for (let c = 0; c < 3; c++) col[c] += (base[c] + (tc[c] - base[c]) * best - col[c]) * Math.min(1, 0.1 * dt);
@@ -270,8 +277,8 @@
       const pts = act && act.kind === 'text' ? act.pts : null;
       const damp = Math.pow(0.8, dt);
 
-      for (let i = 0; i < N; i++) {
-        const a = i * GOLDEN + t * 0.25;
+      for (let i = 0; i < L; i++) {
+        const a = i * GOLDEN + spin * (1.4 - 0.7 * Math.sqrt(i / L));   // inner rings turn faster: a fluid swirl
         const ring = spacing * Math.sqrt(i) * (1 + 0.04 * Math.sin(t * 1.3 + i * 0.01));
         let tx = cx + Math.cos(a) * ring;
         let ty = cy + Math.sin(a) * ring;
@@ -316,7 +323,7 @@
       for (let pass = 0; pass < 2; pass++) {
         ctx.fillStyle = `rgba(${rgb},${(pass ? 0.05 : 0.025) + 0.03 * k})`;
         ctx.beginPath();
-        for (let i = 0; i < N; i++) {
+        for (let i = 0; i < L; i++) {
           const q = R[i];
           if (q < 0.45 || (q < 0.75) !== !pass) continue;
           const rr = 0.4 + S[i] * 1.1;
@@ -330,7 +337,7 @@
       const tail = 1 + (1 - o.trail) * 5;
       ctx.fillStyle = `rgba(${rgb},${0.18 + 0.2 * k})`;
       ctx.beginPath();
-      for (let i = 0; i < N; i++) {
+      for (let i = 0; i < L; i++) {
         const z = 0.5 + S[i] * 0.5;
         ctx.rect(X[i] - VX[i] * tail - z / 2, Y[i] - VY[i] * tail - z / 2, z, z);
       }
@@ -339,7 +346,7 @@
       for (let pass = 0; pass < 2; pass++) {
         ctx.fillStyle = `rgba(${rgb},${(pass ? 0.85 : 0.55) + 0.15 * k})`;
         ctx.beginPath();
-        for (let i = 0; i < N; i++) {
+        for (let i = 0; i < L; i++) {
           if ((R[i] < 0.5) === !!pass) continue;
           const z = 0.5 + S[i] * 0.5;
           ctx.rect(X[i] - z / 2, Y[i] - z / 2, z, z);
@@ -361,7 +368,7 @@
       ctx.clearRect(0, 0, W, H);                             // old glow pixels must not be difference-blended
     }
 
-    alloc(off ? 0 : o.count);
+    alloc(off ? 0 : o.count * 2);
     resize();
     scan();
     setMode(o.mode);
@@ -376,7 +383,7 @@
 
     return {
       setMode,
-      setCount(n) { if (!off) alloc(calm ? Math.round(n * 0.3) : n); },
+      setCount(n) { if (!off) alloc((calm ? Math.round(n * 0.3) : n) * 2); },
       // One colour for the swarm and every element; overrides per-element --swarm-color.
       setColor(c) {
         const rgb = toRGB(c);
