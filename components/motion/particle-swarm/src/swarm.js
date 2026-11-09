@@ -2,8 +2,9 @@
  * No dependencies. Load with <script src="swarm.js"></script>, then call createSwarm().
  *
  * Element attributes:
- *   data-swarm="border"   particles flow along the border; the border bulges toward the cursor
- *   data-swarm="text"     particles fill the glyphs of the element's text (one line)
+ *   data-swarm="border"   particles travel along the border (rounded corners too)
+ *   data-swarm="text"     particles travel along the glyph outlines of the element's text (one line)
+ * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
  * CSS on the element:
  *   --swarm-color         swarm tint while it holds this element
@@ -108,19 +109,60 @@
       else c.textAlign = 'left';
       c.fillText(text, x, h / 2);
       const data = c.getImageData(0, 0, w, h).data;
-      let filled = 0;
-      for (let i = 3; i < data.length; i += 4) if (data[i] > 128) filled++;
-      const step = Math.max(2, Math.round(Math.sqrt(filled / N)));
-      const pts = [];
-      for (let y = 0; y < h; y += step)
-        for (let xx = 0; xx < w; xx += step)
-          if (data[(y * w + xx) * 4 + 3] > 128) pts.push(xx, y);
-      for (let i = pts.length / 2 - 1; i > 0; i--) {          // shuffle so particles cross the swarm
-        const j = (Math.random() * (i + 1)) | 0;
-        [pts[2 * i], pts[2 * j]] = [pts[2 * j], pts[2 * i]];
-        [pts[2 * i + 1], pts[2 * j + 1]] = [pts[2 * j + 1], pts[2 * i + 1]];
+      Object.assign(e, outline(data, w, h));
+    }
+
+    // Glyph outlines: edge pixels chained into loops, each resampled to 1 px steps by arc length.
+    // A greedy walk that prefers to go straight is shorter than Moore tracing and good enough here.
+    function outline(data, w, h) {
+      const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && data[(y * w + x) * 4 + 3] > 128;
+      const edge = new Uint8Array(w * h);                       // 1 = edge pixel not yet used
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++)
+          if (on(x, y) && !(on(x - 1, y) && on(x + 1, y) && on(x, y - 1) && on(x, y + 1))) edge[y * w + x] = 1;
+      const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
+      const TURNS = [0, 1, -1, 2, -2, 3, -3, 4];
+      const pts = [], starts = [], lens = [];
+      for (let p = 0; p < edge.length; p++) {
+        if (!edge[p]) continue;
+        const loop = [];
+        let x = p % w, y = (p / w) | 0, d = 0, moved = true;
+        while (moved) {
+          edge[y * w + x] = 0;
+          loop.push(x, y);
+          moved = false;
+          for (const tn of TURNS) {
+            const q = (d + tn) & 7, nx = x + DX[q], ny = y + DY[q];
+            if (nx >= 0 && ny >= 0 && nx < w && ny < h && edge[ny * w + nx]) { x = nx; y = ny; d = q; moved = true; break; }
+          }
+        }
+        const n = loop.length / 2;
+        if (n < 24) continue;                                   // specks and scraps
+        const cum = [0];
+        for (let j = 0; j < n; j++) {
+          const a = j * 2, b = ((j + 1) % n) * 2;
+          cum.push(cum[j] + Math.hypot(loop[b] - loop[a], loop[b + 1] - loop[a + 1]));
+        }
+        const L = cum[n], M = Math.floor(L);
+        starts.push(pts.length / 2); lens.push(M);
+        for (let s = 0, j = 0; s < M; s++) {
+          const u = s * L / M;
+          while (cum[j + 1] <= u) j++;
+          const f = (u - cum[j]) / (cum[j + 1] - cum[j]), a = j * 2, b = ((j + 1) % n) * 2;
+          pts.push(loop[a] + (loop[b] - loop[a]) * f + 0.5, loop[a + 1] + (loop[b + 1] - loop[a + 1]) * f + 0.5);
+        }
       }
-      if (pts.length) e.pts = Float32Array.from(pts);
+      return pts.length ? { pts: Float32Array.from(pts), starts, lens, total: pts.length / 2 } : { pts: null };
+    }
+
+    // A point on the outlines. p0 in [0,total) picks the loop and the start; adv moves along that loop.
+    function onOutline(e, p0, adv, out) {
+      let c = e.starts.length - 1;
+      while (e.starts[c] > p0) c--;
+      const len = e.lens[c], q = (p0 - e.starts[c] + adv) % len, j = q | 0, f = q - j;
+      const a = (e.starts[c] + j) * 2, b = (e.starts[c] + (j + 1) % len) * 2;
+      out[0] = e.pts[a] + (e.pts[b] - e.pts[a]) * f;
+      out[1] = e.pts[a + 1] + (e.pts[b + 1] - e.pts[a + 1]) * f;
     }
 
     function scan() {
@@ -231,10 +273,10 @@
         }
         if (act && i % SCOUT_EVERY !== 0 && Q[i] < share) {  // on the path: spring fully onto it, no blend
           let ex, ey;
-          if (pts) {
-            const j = (i % (pts.length >> 1)) << 1;
-            ex = bx + pts[j] + Math.sin(t * 2.3 + PH[i] * 7) * 1.2;
-            ey = by + pts[j + 1] + Math.cos(t * 1.9 + PH[i] * 5) * 1.2;
+          if (pts) {                                        // travel a glyph contour at a constant tangent speed
+            onOutline(act, U[i] * act.total, t * PATH_SPEED, tmp);
+            ex = bx + tmp[0] + (R[i] - 0.5) * 1.5;
+            ey = by + tmp[1] + (Q[i] - 0.5) * 1.5;
           } else {                                          // travel the border at a constant tangent speed
             perim(bx, by, bw, bh, rad, U[i] + t * PATH_SPEED / plen, tmp);
             const off = (R[i] - 0.5) * 3 + Math.sin(t * 3 + PH[i] * 5) * 0.6;   // tight, a little random
