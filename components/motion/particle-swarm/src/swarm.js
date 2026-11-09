@@ -5,6 +5,7 @@
  *   data-swarm="border"   particles travel along the border (rounded corners too)
  *   data-swarm="text"     particles travel along the glyph outlines of the element's text (one line)
  * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
+ *   data-swarm-path="offset"  text path style: border (on the outline) | offset (pushed out 5px) | shadow (shifted down-right)
  *   data-swarm-magnet="0.2"  how far the element leans toward the cursor (0 = none)
  * CSS on the element:
  *   --swarm-color         swarm tint while it holds this element
@@ -19,6 +20,7 @@
   const SCOUT_EVERY = 12;                         // one particle in 12 is a scout
   const SCOUT_RANGE = 600;
   const PATH_SPEED = 90;                          // px per second along an outline
+  const TEXT_PATHS = { border: [0, 0, 0], offset: [0, 0, 5], shadow: [4, 5, 0] };   // [shift x, shift y, push out] px
 
   function createSwarm(opts) {
     const o = Object.assign({
@@ -29,6 +31,7 @@
       magnet: 0.15,        // default lean toward the cursor
       trail: 0.3,          // tail length: lower = longer tails
       selector: '[data-swarm]',
+      textPath: 'border',    // text path style: 'border' | 'offset' | 'shadow'; per element: data-swarm-path
       reducedMotion: 'calm', // with prefers-reduced-motion: 'calm' (30% count, no drift, no lean) | 'off'
     }, opts || {});
 
@@ -99,7 +102,7 @@
       const c = oc.getContext('2d', { willReadFrequently: true });
       c.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
       if ('letterSpacing' in c) c.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing;
-      c.textBaseline = 'middle';
+      c.textBaseline = 'alphabetic';
       c.fillStyle = '#fff';
       let text = e.el.textContent.trim().replace(/\s+/g, ' ');
       if (cs.textTransform === 'uppercase') text = text.toUpperCase();
@@ -108,7 +111,11 @@
       if (cs.textAlign === 'center') { c.textAlign = 'center'; x = pl + (w - pl - pr) / 2; }
       else if (cs.textAlign === 'right' || cs.textAlign === 'end') { c.textAlign = 'right'; x = w - pr; }
       else c.textAlign = 'left';
-      c.fillText(text, x, h / 2);
+      // CSS puts half the leading above the font's content area; place the baseline the same way.
+      const m = c.measureText(text);
+      const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+      const baseY = pt + (h - pt - pb - m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2 + m.fontBoundingBoxAscent;
+      c.fillText(text, x, baseY);
       const data = c.getImageData(0, 0, w, h).data;
       Object.assign(e, outline(data, w, h));
     }
@@ -123,7 +130,7 @@
           if (on(x, y) && !(on(x - 1, y) && on(x + 1, y) && on(x, y - 1) && on(x, y + 1))) edge[y * w + x] = 1;
       const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
       const TURNS = [0, 1, -1, 2, -2, 3, -3, 4];
-      const pts = [], starts = [], lens = [];
+      const pts = [], nrm = [], starts = [], lens = [];
       for (let p = 0; p < edge.length; p++) {
         if (!edge[p]) continue;
         const loop = [];
@@ -152,8 +159,18 @@
           const f = (u - cum[j]) / (cum[j + 1] - cum[j]), a = j * 2, b = ((j + 1) % n) * 2;
           pts.push(loop[a] + (loop[b] - loop[a]) * f + 0.5, loop[a + 1] + (loop[b + 1] - loop[a + 1]) * f + 0.5);
         }
+        const s0 = starts[starts.length - 1];
+        for (let s = 0; s < M; s++) {
+          const a = (s0 + (s + M - 1) % M) * 2, b = (s0 + (s + 1) % M) * 2;
+          let nx = pts[b + 1] - pts[a + 1], ny = pts[a] - pts[b];
+          const l = Math.hypot(nx, ny) || 1;
+          nx /= l; ny /= l;
+          const px = pts[(s0 + s) * 2], py = pts[(s0 + s) * 2 + 1];
+          if (on(Math.floor(px + nx * 2), Math.floor(py + ny * 2))) { nx = -nx; ny = -ny; }   // point out of the glyph
+          nrm.push(nx, ny);
+        }
       }
-      return pts.length ? { pts: Float32Array.from(pts), starts, lens, total: pts.length / 2 } : { pts: null };
+      return pts.length ? { pts: Float32Array.from(pts), nrm: Float32Array.from(nrm), starts, lens, total: pts.length / 2 } : { pts: null };
     }
 
     // A point on the outlines. p0 in [0,total) picks the loop and the start; adv moves along that loop.
@@ -164,6 +181,7 @@
       const a = (e.starts[c] + j) * 2, b = (e.starts[c] + (j + 1) % len) * 2;
       out[0] = e.pts[a] + (e.pts[b] - e.pts[a]) * f;
       out[1] = e.pts[a + 1] + (e.pts[b + 1] - e.pts[a + 1]) * f;
+      out[2] = e.nrm[a]; out[3] = e.nrm[a + 1];
     }
 
     function scan() {
@@ -174,6 +192,7 @@
         return {
           el, kind: el.dataset.swarm === 'text' ? 'text' : 'border',
           magnet: calm || isNaN(m) ? o.magnet : m,
+          path: el.dataset.swarmPath || o.textPath,
           rgb: toRGB(cs.getPropertyValue('--swarm-color').trim() || o.color),
           k: 0, tx: 0, ty: 0, pts: null, rad: 0, r: 0, scout: false, cT: '', cS: null, cOn: false,
         };
@@ -297,8 +316,9 @@
           let ex, ey;
           if (pts) {                                        // travel a glyph contour at a constant tangent speed
             onOutline(act, U[i] * act.total, t * PATH_SPEED, tmp);
-            ex = bx + tmp[0] + (R[i] - 0.5) * 1.5;
-            ey = by + tmp[1] + (Q[i] - 0.5) * 1.5;
+            const [sx, sy, lift] = TEXT_PATHS[act.path] || TEXT_PATHS.border;
+            ex = bx + tmp[0] + tmp[2] * lift + sx + (R[i] - 0.5) * 1.5;
+            ey = by + tmp[1] + tmp[3] * lift + sy + (Q[i] - 0.5) * 1.5;
           } else {                                          // travel the border at a constant tangent speed
             perim(bx, by, bw, bh, rad, U[i] + t * PATH_SPEED / plen, tmp);
             const off = (R[i] - 0.5) * 3 + Math.sin(t * 3 + PH[i] * 5) * 0.6;   // tight, a little random
@@ -397,6 +417,10 @@
       setMode,
       setCount(n) { if (!off) alloc((calm ? Math.round(n * 0.3) : n) * 2); },
       // One colour for the swarm and every element; overrides per-element --swarm-color.
+      setPath(style) {
+        o.textPath = style;
+        els.forEach(e => { e.path = e.el.dataset.swarmPath || style; });
+      },
       setColor(c) {
         const rgb = toRGB(c);
         base.splice(0, 3, ...rgb);

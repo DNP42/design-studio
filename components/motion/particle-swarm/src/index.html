@@ -84,6 +84,11 @@
       <option value="700" selected>700</option>
       <option value="1200">1200</option>
     </select>
+    <select aria-label="Text path">
+      <option value="border" selected>Border</option>
+      <option value="offset">Offset</option>
+      <option value="shadow">Shadow</option>
+    </select>
     <input type="color" value="#ffd36e" aria-label="Swarm colour">
   </div>
 
@@ -96,6 +101,7 @@
       modeBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     }));
     document.querySelector('.controls select').addEventListener('change', e => swarm.setCount(+e.target.value));
+    document.querySelector('[aria-label="Text path"]').addEventListener('change', e => swarm.setPath(e.target.value));
     document.querySelector('.controls input[type=color]').addEventListener('input', e => swarm.setColor(e.target.value));
   </script>
 </body>
