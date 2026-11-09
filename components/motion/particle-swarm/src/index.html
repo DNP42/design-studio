@@ -73,6 +73,15 @@
     50%      { scale: calc(1 + var(--swarm, 0) * 0.14); }
   }
   @media (prefers-reduced-motion: reduce) { .btn.is-swarmed .lbl { animation-duration: 5s; } }   /* calm: slower, not off */
+  /* Click: the label grows 10% in about 0.1 s, then vanishes while the swarm turns it into particles; it fades back in. */
+  .btn.is-burst .lbl { animation: burst 1.3s ease-out; }
+  @keyframes burst {
+    0%   { scale: calc(1 + var(--swarm, 0) * 0.08); opacity: 1; }
+    8%   { scale: calc((1 + var(--swarm, 0) * 0.08) * 1.1); opacity: 1; }
+    10%  { scale: calc((1 + var(--swarm, 0) * 0.08) * 1.1); opacity: 0; }
+    65%  { scale: 1; opacity: 0; }
+    100% { opacity: 1; }
+  }
 
   /* Player buttons: the swarm draws the ring and the icon. The glyph is a faint hint that fades as the swarm arrives. */
   .player { align-items: center; gap: 24px; }

@@ -45,6 +45,7 @@
       textPath: 'border',    // text path style: 'border' | 'offset' | 'shadow'; per element: data-swarm-path
       prose: 'avoid',        // running text [data-swarm-prose]: 'avoid' | 'highlight' (spotlight, styled by the page) | 'behind' | 'over'
       proseGap: 10,          // px the swarm keeps clear of running text in 'avoid'
+      burst: true,           // a click on a border target breaks its label into particles (page CSS: .is-burst)
       reducedMotion: 'calm', // with prefers-reduced-motion: 'calm' (30% count, no drift, no lean) | 'off'
     }, opts || {});
 
@@ -109,15 +110,22 @@
       const w = Math.ceil(r.width), h = Math.ceil(r.height);
       e.pts = null;
       if (!w || !h) return;
-      const cs = getComputedStyle(e.el);
       const oc = document.createElement('canvas');
       oc.width = w; oc.height = h;
       const c = oc.getContext('2d', { willReadFrequently: true });
+      drawText(c, e.el, w, h);
+      const data = c.getImageData(0, 0, w, h).data;
+      Object.assign(e, outline(data, w, h));
+    }
+
+    // Paint an element's text in white where CSS lays it out, in a w x h box (layout px).
+    function drawText(c, el, w, h) {
+      const cs = getComputedStyle(el);
       c.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
       if ('letterSpacing' in c) c.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing;
       c.textBaseline = 'alphabetic';
       c.fillStyle = '#fff';
-      let text = e.el.textContent.trim().replace(/\s+/g, ' ');
+      let text = el.textContent.trim().replace(/\s+/g, ' ');
       if (cs.textTransform === 'uppercase') text = text.toUpperCase();
       const pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
       let x = pl;
@@ -129,8 +137,46 @@
       const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
       const baseY = pt + (h - pt - pb - m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2 + m.fontBoundingBoxAscent;
       c.fillText(text, x, baseY);
-      const data = c.getImageData(0, 0, w, h).data;
-      Object.assign(e, outline(data, w, h));
+    }
+
+    // Click burst: the label (.lbl, or the element) breaks into one particle per few glyph pixels.
+    // The page's CSS grows and hides the label (class is-burst); the particles scatter, drift to the hive and fade.
+    const BURST_MAX = 900, BURST_LIFE = 1.4;
+    let bursts = [];
+    function burst(e) {
+      const el = e.el;
+      el.classList.remove('is-burst');
+      void el.offsetWidth;                                    // restart the CSS animation on a quick second click
+      el.classList.add('is-burst');
+      clearTimeout(e.bt);
+      e.bt = setTimeout(() => el.classList.remove('is-burst'), 1300);
+      setTimeout(() => {                                      // at full grow: the CSS hides the text now
+        const lbl = el.querySelector('.lbl') || el, r = lbl.getBoundingClientRect();
+        const lw = lbl.offsetWidth, lh = lbl.offsetHeight, w = Math.ceil(r.width), h = Math.ceil(r.height);
+        if (!lw || !lh || !w || !h) return;
+        const oc = document.createElement('canvas');
+        oc.width = w; oc.height = h;
+        const c = oc.getContext('2d', { willReadFrequently: true });
+        c.scale(r.width / lw, r.height / lh);
+        drawText(c, lbl, lw, lh);
+        const data = c.getImageData(0, 0, w, h).data;
+        let filled = 0;
+        for (let p = 3; p < data.length; p += 4) if (data[p] > 128) filled++;
+        const step = Math.max(1, Math.ceil(Math.sqrt(filled / BURST_MAX)));
+        const px = [], py = [], mx0 = r.left + r.width / 2, my0 = r.top + r.height / 2;
+        for (let y = 0; y < h; y += step)
+          for (let x = 0; x < w; x += step)
+            if (data[(y * w + x) * 4 + 3] > 128) { px.push(r.left + x); py.push(r.top + y); }
+        const n = px.length, b = { n, t0: performance.now(), rgb: e.rgb,
+          x: Float32Array.from(px), y: Float32Array.from(py), vx: new Float32Array(n), vy: new Float32Array(n), s: new Float32Array(n) };
+        for (let i = 0; i < n; i++) {
+          const dx = b.x[i] - mx0, dy = b.y[i] - my0, l = Math.hypot(dx, dy) || 1, sp = 0.6 + Math.random() * 2.4;
+          b.vx[i] = dx / l * sp + (Math.random() - 0.5) * 1.2;
+          b.vy[i] = dy / l * sp + (Math.random() - 0.5) * 1.2 - 0.5;   // a little lift
+          b.s[i] = 1 + Math.random() * 1.2;
+        }
+        if (n) bursts.push(b);
+      }, 110);
     }
 
     // A closed loop (flat x,y list) resampled to 1 px steps by arc length; appends to pts and records start and length.
@@ -304,6 +350,12 @@
       els.forEach(readRadius);
       els.forEach(sample);
       els.forEach(e => {                                    // a click on a shape cycles to its next design
+        if (e.kind === 'border') {                          // a click on a button bursts its label
+          const pop = () => { if (o.burst && !off) burst(e); };
+          e.el.addEventListener('click', pop);
+          e.off = () => { e.el.removeEventListener('click', pop); clearTimeout(e.bt); e.el.classList.remove('is-burst'); };
+          return;
+        }
         if (e.kind !== 'shape') return;
         const next = () => {
           e.design = (e.design + 1) % (SHAPES[e.shape] || [0]).length;
@@ -534,6 +586,26 @@
           ctx.rect(X[i] - z / 2, Y[i] - z / 2, z, z);
         }
         ctx.fill();
+      }
+
+      // Bursts: scatter with drag, then a growing pull to the hive centre; fade over BURST_LIFE.
+      if (bursts.length) {
+        bursts = bursts.filter(b => (now - b.t0) / 1000 < BURST_LIFE);
+        const drag = Math.pow(0.94, dt);
+        for (const b of bursts) {
+          const age = (now - b.t0) / 1000, pull = Math.max(0, age - 0.3) * 0.004 * dt, fade = 1 - age / BURST_LIFE;
+          const [br, bg, bb] = o.mode === 'contrast' ? [255, 255, 255] : b.rgb;
+          ctx.fillStyle = `rgba(${br},${bg},${bb},${0.9 * fade * gl})`;
+          ctx.beginPath();
+          for (let i = 0; i < b.n; i++) {
+            b.vx[i] = b.vx[i] * drag + (cx - b.x[i]) * pull;
+            b.vy[i] = b.vy[i] * drag + (cy - b.y[i]) * pull;
+            b.x[i] += b.vx[i] * dt; b.y[i] += b.vy[i] * dt;
+            const z = b.s[i] * sz * (0.6 + 0.4 * fade);
+            ctx.rect(b.x[i] - z / 2, b.y[i] - z / 2, z, z);
+          }
+          ctx.fill();
+        }
       }
 
       raf = requestAnimationFrame(frame);
