@@ -6,6 +6,7 @@
  *   data-swarm="text"     particles travel along the glyph outlines of the element's text (one line)
  *   data-swarm="shape"    particles draw a generated shape centred on the element: data-swarm-shape="egg"
  *                         (a click cycles the design; data-swarm-design="n" picks the start)
+ *                         music icons in a ring: play (click toggles pause) | next | prev | stop
  *   data-swarm-scout="off"  scouts skip this element (for a target that must stay hidden)
  * The closer the cursor, the larger the share of the swarm that leaves the hive for the element.
  *   data-swarm-path="offset"  text path style: border (on the outline) | offset (pushed out 5px) | shadow (shifted down-right)
@@ -47,7 +48,7 @@
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const calm = reduce && o.reducedMotion === 'calm';
     const off = reduce && o.reducedMotion === 'off';
-    if (calm) { o.count = Math.round(o.count * 0.3); o.magnet = 0; }
+    if (calm) { o.magnet = 0; }
     const cvs = document.createElement('canvas');
     cvs.setAttribute('aria-hidden', 'true');
     Object.assign(cvs.style, {
@@ -226,7 +227,22 @@
         return line(...p);
       }),
     ];
-    const SHAPES = { egg: EGG_DECOR.map(d => (w, h) => [eggOutline(1.25 * h), ...d(1.25 * h)]) };   // egg height 2.5 x the element
+    // Music icons, s = half the button's short side. Each icon sits inside a ring that is the button border.
+    const rect = (x0, y0, x1, y1) => ({ p: [x0, y0, x1, y0, x1, y1, x0, y1], closed: true });
+    const tri = (...p) => ({ p, closed: true });
+    const ICONS = {
+      play:  s => [tri(-0.28 * s, -0.4 * s, 0.42 * s, 0, -0.28 * s, 0.4 * s)],
+      pause: s => [rect(-0.3 * s, -0.36 * s, -0.1 * s, 0.36 * s), rect(0.1 * s, -0.36 * s, 0.3 * s, 0.36 * s)],
+      next:  s => [tri(-0.36 * s, -0.34 * s, 0.14 * s, 0, -0.36 * s, 0.34 * s), rect(0.18 * s, -0.34 * s, 0.3 * s, 0.34 * s)],
+      prev:  s => [tri(0.36 * s, -0.34 * s, -0.14 * s, 0, 0.36 * s, 0.34 * s), rect(-0.3 * s, -0.34 * s, -0.18 * s, 0.34 * s)],
+      stop:  s => [rect(-0.3 * s, -0.3 * s, 0.3 * s, 0.3 * s)],
+    };
+    const icon = name => (w, h) => { const s = Math.min(w, h) / 2; return [ring(0, 0, s, 96), ...ICONS[name](s)]; };
+    const SHAPES = {
+      egg: EGG_DECOR.map(d => (w, h) => [eggOutline(1.25 * h), ...d(1.25 * h)]),   // egg height 2.5 x the element
+      play: [icon('play'), icon('pause')],                                          // a click toggles play and pause
+      next: [icon('next')], prev: [icon('prev')], stop: [icon('stop')],
+    };
 
     function buildShape(e) {
       const r = baseRect(e), make = SHAPES[e.shape];
@@ -494,7 +510,7 @@
       ctx.clearRect(0, 0, W, H);                             // old glow pixels must not be difference-blended
     }
 
-    alloc(off ? 0 : o.count * 2);
+    alloc(off ? 0 : (calm ? Math.round(o.count * 0.3) : o.count) * 2);   // o.count stays the asked-for count; calm draws 30% of it
     resize();
     scan();
     setMode(o.mode);
