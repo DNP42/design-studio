@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+.env*
+!.env.example
+.claude/worktrees/
+.claude/settings.local.json
+*.mp4
+*.mov
