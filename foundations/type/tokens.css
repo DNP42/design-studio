@@ -1,0 +1,31 @@
+/* design-studio type tokens. All sizes are in rem, so the browser font
+   setting scales them. Do not set font-size on html in px. The smallest
+   size is 18px at the default browser setting. */
+
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-sm: 1.125rem;   /* 18px: hints, captions, footer */
+  --text-base: 1.25rem;  /* 20px: body, inputs, buttons */
+  --text-lg: 1.5rem;     /* 24px: lead text, h3 */
+  --text-xl: 1.875rem;   /* 30px: h2 */
+  --text-2xl: 2.25rem;   /* 36px: h1 on mobile */
+  --text-3xl: 3rem;      /* 48px: h1 on desktop */
+
+  --leading-body: 1.6;
+  --leading-heading: 1.25;
+
+  --weight-body: 400;
+  --weight-strong: 600;
+  --weight-heading: 700;
+
+  --measure: 65ch;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  font-weight: var(--weight-body);
+}
