@@ -292,7 +292,7 @@
           tx += (tmp[0] - tx) * out;
           ty += (tmp[1] - ty) * out;
         }
-        if (act && i % SCOUT_EVERY !== 0 && Q[i] < share) {  // on the path: spring fully onto it, no blend
+        if (act && Q[i] < share) {  // on the path: spring fully onto it, no blend
           let ex, ey;
           if (pts) {                                        // travel a glyph contour at a constant tangent speed
             onOutline(act, U[i] * act.total, t * PATH_SPEED, tmp);
@@ -318,6 +318,17 @@
       ctx.globalCompositeOperation = 'lighter';
       const [r, g, b] = o.mode === 'contrast' ? [255, 255, 255] : col.map(Math.round);
       const rgb = `${r},${g},${b}`;
+
+      // Queen: while the swarm works an element, a soft glow keeps the cursor's place.
+      if (k > 0.02) {
+        const qr = 22 + 3 * Math.sin(t * 2.2);
+        const qg = ctx.createRadialGradient(cx, cy, 0, cx, cy, qr);
+        qg.addColorStop(0, `rgba(${rgb},${0.5 * k})`);
+        qg.addColorStop(0.35, `rgba(${rgb},${0.18 * k})`);
+        qg.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle = qg;
+        ctx.fillRect(cx - qr, cy - qr, qr * 2, qr * 2);
+      }
 
       // Halos: small and uneven. Two alpha buckets (two fills); some particles get no halo.
       for (let pass = 0; pass < 2; pass++) {
