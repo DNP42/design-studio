@@ -23,6 +23,7 @@
     margin: 0; text-align: center; text-transform: uppercase;
     font-size: clamp(64px, 16vw, 200px); font-weight: 900; letter-spacing: 0.02em; line-height: 1;
     color: var(--fg);
+    text-shadow: 0 0 calc(var(--swarm, 0) * 26px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 65%), transparent);
   }
   .lede { margin: -16px 0 0; color: var(--muted); max-width: 46ch; text-align: center; }
 
@@ -52,6 +53,7 @@
   }
   .controls button[aria-pressed="true"] { background: #ffffff1f; }
   .controls select { background: #ffffff0f; }
+  .controls input[type=color] { width: 34px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -80,6 +82,7 @@
       <option value="700" selected>700</option>
       <option value="1200">1200</option>
     </select>
+    <input type="color" value="#ffd36e" aria-label="Swarm colour">
   </div>
 
   <script src="swarm.js"></script>
@@ -91,6 +94,7 @@
       modeBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     }));
     document.querySelector('.controls select').addEventListener('change', e => swarm.setCount(+e.target.value));
+    document.querySelector('.controls input[type=color]').addEventListener('input', e => swarm.setColor(e.target.value));
   </script>
 </body>
 </html>

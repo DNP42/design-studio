@@ -15,7 +15,7 @@
 
   const TAU = Math.PI * 2;
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));   // golden angle: an even, comb-like disc
-  const HIVE_RADIUS = 70;
+  const HIVE_RADIUS = 38;
   const SCOUT_EVERY = 12;                         // one particle in 12 is a scout
   const SCOUT_RANGE = 600;
   const PATH_SPEED = 90;                          // px per second along an outline
@@ -377,6 +377,12 @@
     return {
       setMode,
       setCount(n) { if (!off) alloc(calm ? Math.round(n * 0.3) : n); },
+      // One colour for the swarm and every element; overrides per-element --swarm-color.
+      setColor(c) {
+        const rgb = toRGB(c);
+        base.splice(0, 3, ...rgb);
+        els.forEach(e => { e.rgb = rgb; e.el.style.setProperty('--swarm-color', c); });
+      },
       refresh: scan,
       destroy() {
         cancelAnimationFrame(raf);
