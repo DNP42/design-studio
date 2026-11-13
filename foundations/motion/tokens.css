@@ -1,0 +1,37 @@
+/* design-studio motion tokens.
+   Animate only transform and opacity. Move by a distance token, so that
+   reduced motion turns every move into a fade without a change in the component. */
+
+:root {
+  --motion-duration-instant: 100ms;
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 300ms;
+  --motion-duration-page: 400ms;
+
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-enter: cubic-bezier(0, 0, 0, 1);
+  --motion-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
+  --motion-distance-lg: 16px;
+  --motion-scale-from: 0.98;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* Fade only: no travel, no scale, short durations. */
+    --motion-duration-base: 150ms;
+    --motion-duration-slow: 150ms;
+    --motion-duration-page: 150ms;
+    --motion-distance-sm: 0px;
+    --motion-distance-md: 0px;
+    --motion-distance-lg: 0px;
+    --motion-scale-from: 1;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
