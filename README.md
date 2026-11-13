@@ -2,6 +2,9 @@
 
 Free, open-source design parts: web UI (React + Tailwind) and motion (Remotion). Copy a part into your project and change it. MIT licence.
 
+## Design rules
+Every product redesign follows [`docs/design-rules.md`](docs/design-rules.md). Tokens and full rules are in [`foundations/`](foundations/README.md).
+
 ## What is here
 | Shelf | Path |
 |---|---|
