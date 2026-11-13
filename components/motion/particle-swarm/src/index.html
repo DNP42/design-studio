@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Particle Swarm</title>
+<style>
+  :root {
+    --bg: #07090d; --fg: #e8eef5; --muted: #8893a3; --line: #ffffff2e;
+    --light-bg: #f2efe8; --light-fg: #121418;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    cursor: none;                                      /* the hive is the cursor */
+  }
+  section { position: relative; min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 40px; padding: 48px 16px; }
+
+  .title {
+    --swarm-color: #ffd36e;
+    margin: 0; text-align: center; text-transform: uppercase;
+    font-size: clamp(64px, 16vw, 200px); font-weight: 900; letter-spacing: 0.02em; line-height: 1;
+    color: var(--fg);
+    text-shadow: 0 0 calc(var(--swarm, 0) * 26px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 65%), transparent);
+  }
+  .lede { --swarm-color: #ffd36e; --rest: var(--muted); margin: -16px 0 0; color: var(--rest); max-width: 46ch; text-align: center; }
+  /* Prose "highlight": a spotlight in the text itself. The swarm writes --sx/--sy (its centre) and --swarm (closeness). */
+  .swarm-prose-highlight [data-swarm-prose] {
+    color: transparent; -webkit-background-clip: text; background-clip: text;
+    background-image: radial-gradient(circle calc(30px + var(--swarm, 0) * 60px) at var(--sx, -999px) var(--sy, -999px),
+      var(--swarm-color), color-mix(in oklab, var(--swarm-color) 30%, var(--fg)) 45%, var(--rest));
+  }
+
+  /* Invisible on purpose: no colour, no glow CSS. Only the swarm shows it. */
+  .logo {
+    --swarm-color: #ffd36e;
+    margin: 0; color: transparent; text-shadow: none; user-select: none;
+    font-size: clamp(56px, 12vw, 120px); font-weight: 900; letter-spacing: 0.08em; line-height: 1;
+  }
+  /* Invisible button: the swarm draws an Easter egg around it; each click changes the design. */
+  .egg {
+    position: absolute; right: clamp(100px, 14vw, 240px); bottom: 130px; width: 60px; height: 80px;
+    padding: 0; border: 0; background: none; color: transparent; cursor: none;
+  }
+  .egg:focus-visible { outline: 1px dashed #ffffff40; outline-offset: 4px; }
+
+  .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
+  /* Button padding rules (all in em, so padding scales with the font size):
+     1. Text button: padding = 0.55em top/bottom, 1.1em left/right (x = 2 * y). Height = 1em line + 2 * 0.55em = 2.1em.
+     2. Pill (radius 999px): x must be >= half the height (1.05em), so the text stays clear of the curve. 1.1em passes.
+     3. The label grows up to 19% (swarm 8% x click burst 10%). The x padding covers it: keep x >= 0.1 * label width.
+     4. Size a button with font-size only. Do not set px padding on a type; change --pad-y / --pad-x if a type needs it.
+     5. Icon button: a square of the text-button height (1em + 2 * --pad-y). Text link: 0.25em all round.
+     6. Shape buttons (player, egg) are exempt: the swarm draws their ring and icon, so they keep a fixed size. */
+  .btn {
+    --swarm-color: #7cf7ff; --pad-y: 0.55em; --pad-x: 1.1em;
+    font: 600 18px/1 inherit; font-family: inherit; letter-spacing: 0.04em;
+    padding: var(--pad-y) var(--pad-x); border-radius: 999px; background: transparent; cursor: none;
+    color: var(--fg);
+    border: 1.5px solid transparent;                   /* the particles are the moving border */
+    box-shadow: 0 0 calc(var(--swarm, 0) * 22px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 45%), transparent);
+    text-shadow: 0 0 calc(var(--swarm, 0) * 14px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 60%), transparent);
+  }
+  .btn.alt { --swarm-color: #ff6ec7; border-radius: 10px; }
+  /* Button types: each keeps the transparent border; only the shape and size change. */
+  .btn.sharp { --swarm-color: #b5ff6e; border-radius: 0; }
+  .btn.round { --swarm-color: #ffb36e; border-radius: 16px; }
+  .btn.icon { --swarm-color: #c9a6ff; width: calc(1em + 2 * var(--pad-y)); height: calc(1em + 2 * var(--pad-y)); padding: 0; border-radius: 50%; font-size: 24px; }
+  .btn.link { --swarm-color: #6effc0; --pad-y: 0.25em; --pad-x: 0.25em; border-radius: 6px; font-weight: 500; text-decoration: underline; text-underline-offset: 5px; }
+  .btn.cta { --swarm-color: #ff6e6e; border-radius: 0.5em; font-size: 24px; font-weight: 700; }
+  .types { align-items: center; max-width: 760px; }
+
+  /* The label grows with the swarm, then breathes while the swarm holds the button. */
+  .btn .lbl { display: inline-block; scale: calc(1 + var(--swarm, 0) * 0.08); transition: scale 0.2s ease-out; }
+  .btn.is-swarmed .lbl { animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe {
+    0%, 100% { scale: calc(1 + var(--swarm, 0) * 0.06); }
+    50%      { scale: calc(1 + var(--swarm, 0) * 0.14); }
+  }
+  @media (prefers-reduced-motion: reduce) { .btn.is-swarmed .lbl { animation-duration: 5s; } }   /* calm: slower, not off */
+  /* Click: the label grows 10% in about 0.1 s, then vanishes while the swarm turns it into particles; it fades back in. */
+  .btn.is-burst .lbl { animation: burst 1.3s ease-out; }
+  @keyframes burst {
+    0%   { scale: calc(1 + var(--swarm, 0) * 0.08); opacity: 1; }
+    8%   { scale: calc((1 + var(--swarm, 0) * 0.08) * 1.1); opacity: 1; }
+    10%  { scale: calc((1 + var(--swarm, 0) * 0.08) * 1.1); opacity: 0; }
+    65%  { scale: 1; opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  /* Player buttons: the swarm draws the ring and the icon. The glyph is a faint hint that fades as the swarm arrives. */
+  .player { align-items: center; gap: 24px; }
+  .btn.music {
+    --swarm-color: #ffd36e; width: 56px; height: 56px; padding: 0; border-radius: 50%; font-size: 18px;
+    color: color-mix(in oklab, var(--fg) calc(45% - var(--swarm, 0) * 45%), transparent); text-shadow: none;
+  }
+  .btn.music.big { width: 76px; height: 76px; font-size: 24px; }
+
+  /* Info text: the swarm draws a circled 'i' (or a red X for danger) above the button; this box shows below it. */
+  .swarm-tip {
+    max-width: min(280px, calc(100vw - 32px)); padding: 8px 12px; border-radius: 10px;
+    background: #0d1118f2; color: #e8edf5; border: 1px solid transparent;   /* the particles are its border */
+    font: 500 13px/1.45 system-ui, sans-serif; text-align: center;
+    box-shadow: 0 6px 24px #0006, 0 0 calc(var(--swarm, 0) * 22px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 45%), transparent);
+    text-shadow: 0 0 calc(var(--swarm, 0) * 10px) color-mix(in oklab, var(--swarm-color) calc(var(--swarm, 0) * 55%), transparent);
+  }
+  .swarm-tip.is-swarmed { animation: tip-breathe 2.4s ease-in-out infinite; }
+  @keyframes tip-breathe { 50% { scale: calc(1 + var(--swarm, 0) * 0.03); } }
+  @media (prefers-reduced-motion: reduce) { .swarm-tip.is-swarmed { animation-duration: 5s; } }
+  .swarm-tip.is-danger { color: #ffd9d9; }
+  .danger-zone { position: relative; padding: 64px 32px 24px; border: 1px dashed #ff4d4d88; border-radius: 14px; }
+  .dz-title {
+    position: absolute; top: -0.75em; left: 16px; margin: 0; padding: 0 8px; background: var(--light-bg);
+    font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #c92a2a;
+  }
+
+  .light { background: var(--light-bg); color: var(--light-fg); }
+  .light .title { --fg: var(--light-fg); --swarm-color: #3a5bff; font-size: clamp(48px, 11vw, 140px); }
+  .light .lede { --rest: #5a606b; --fg: var(--light-fg); --swarm-color: #3a5bff; }
+  .light .btn { --fg: var(--light-fg); --swarm-color: #3a5bff; }
+  .light .btn.danger { --fg: #c92a2a; --swarm-color: #ff4d4d; }
+
+  .term {
+    --accent: #ffd36e;
+    position: fixed; z-index: 10000; left: 16px; bottom: 16px;
+    width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+    display: flex; flex-direction: column; cursor: auto;               /* settings keep a normal pointer */
+    font-size: 13px; color: var(--fg);
+    background: #0d1118e6; border: 1px solid var(--line); border-radius: 18px;
+    box-shadow: 0 12px 40px #0008; backdrop-filter: blur(10px);
+  }
+  .term-bar {
+    display: flex; justify-content: center; padding: 8px 0 2px;
+    cursor: grab; user-select: none; touch-action: none;
+  }
+  .term-bar:active { cursor: grabbing; }
+  .term-bar::before { content: ''; width: 36px; height: 4px; border-radius: 2px; background: var(--line); }
+  .term-bar:hover::before { background: #ffffff55; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px 10px; }
+  .controls button, .controls select {
+    font: 500 13px/1 inherit; font-family: inherit; color: var(--fg); background: transparent;
+    border: 0; border-radius: 999px; padding: 8px 13px; cursor: pointer;
+  }
+  .controls button:hover, .controls select:hover { background: #ffffff12; }
+  .controls button[aria-pressed="true"] { background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--accent); }
+  .controls select { background: #ffffff0f; }
+  .controls select option { background: #0d1118; }
+  .controls input[type=color] { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+  .tune { flex: 1; min-height: 0; overflow: auto; padding: 6px 16px 14px; border-top: 1px solid var(--line); touch-action: pan-y; }
+  .tune[hidden] { display: none; }
+  .tune label { display: grid; grid-template-columns: 7.5em 1fr 3.5em; align-items: center; gap: 8px; padding: 5px 0; }
+  .tune output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tune input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent); }
+  .test { display: flex; gap: 6px; padding: 10px 0 8px; }
+  .test button {
+    font: 500 13px/1 inherit; font-family: inherit; color: var(--fg); background: #ffffff0f;
+    border: 0; border-radius: 999px; padding: 8px 13px; cursor: pointer;
+  }
+  .test button:hover { background: #ffffff1f; }
+  .readout {
+    margin: 0; padding: 10px 12px; border-radius: 12px; background: #ffffff08; color: var(--muted);
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; user-select: all;
+  }
+</style>
+</head>
+<body>
+  <section>
+    <h1 class="title" data-swarm="text" data-swarm-magnet="0.04">Swarm</h1>
+    <p class="logo" data-swarm="text" data-swarm-magnet="0" data-swarm-scout="off">DNP</p>
+    <p class="lede" data-swarm-prose>Move the cursor. The swarm follows it. Go near the word or a button: the closer you get, the more of the swarm leaves the hive and runs along the letter outlines or the button border.</p>
+    <div class="row">
+      <button class="btn" data-swarm="border" data-swarm-magnet="0.22" data-swarm-info="Create a free account. It takes one minute."><span class="lbl">Get started</span></button>
+      <button class="btn alt" data-swarm="border" data-swarm-magnet="0.22" data-swarm-info="Open the full guide in this tab."><span class="lbl">Read more</span></button>
+    </div>
+    <div class="row types">
+      <button class="btn sharp" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Sharp</span></button>
+      <button class="btn round" data-swarm="border" data-swarm-magnet="0.22"><span class="lbl">Rounded</span></button>
+      <button class="btn icon" data-swarm="border" data-swarm-magnet="0.3" aria-label="Add" data-swarm-info="Add a new item to the list."><span class="lbl">+</span></button>
+      <button class="btn link" data-swarm="border" data-swarm-magnet="0.15"><span class="lbl">Text link</span></button>
+      <button class="btn cta" data-swarm="border" data-swarm-magnet="0.18"><span class="lbl">Start now</span></button>
+    </div>
+    <div class="row player" role="group" aria-label="Player">
+      <button class="btn music" data-swarm="shape" data-swarm-shape="prev" data-swarm-magnet="0.2" aria-label="Previous"><span class="lbl">&#9198;&#xFE0E;</span></button>
+      <button class="btn music big" data-swarm="shape" data-swarm-shape="play" data-swarm-magnet="0.2" aria-label="Play"><span class="lbl">&#9654;&#xFE0E;</span></button>
+      <button class="btn music" data-swarm="shape" data-swarm-shape="next" data-swarm-magnet="0.2" aria-label="Next"><span class="lbl">&#9197;&#xFE0E;</span></button>
+      <button class="btn music" data-swarm="shape" data-swarm-shape="stop" data-swarm-magnet="0.2" aria-label="Stop"><span class="lbl">&#9632;&#xFE0E;</span></button>
+    </div>
+    <button class="egg" data-swarm="shape" data-swarm-shape="egg" data-swarm-magnet="0" data-swarm-scout="off" aria-label="Easter egg"></button>
+  </section>
+
+  <section class="light">
+    <h2 class="title" data-swarm="text" data-swarm-magnet="0.04">Contrast</h2>
+    <p class="lede" data-swarm-prose>Rest the cursor on a button: the swarm draws an info sign and the button tells what it does. A danger action gets a red X. Tab to a button to read it with the keyboard. Switch to Contrast mode. The swarm inverts every pixel it crosses, dark or light.</p>
+    <div class="row">
+      <button class="btn" data-swarm="border" data-swarm-magnet="0.22" data-swarm-info="One email a month. Unsubscribe at any time."><span class="lbl">Subscribe</span></button>
+    </div>
+    <div class="danger-zone" role="group" aria-labelledby="dz">
+      <p class="dz-title" id="dz">Danger zone</p>
+      <button class="btn danger" data-swarm="border" data-swarm-danger data-swarm-magnet="0.1"
+        data-swarm-info="Delete your account and all its data. You cannot undo this."><span class="lbl">Delete account</span></button>
+    </div>
+  </section>
+
+  <div class="term" id="term" role="group" aria-label="Swarm settings">
+    <div class="term-bar" title="Drag to move" aria-hidden="true"></div>
+    <div class="controls">
+      <button type="button" data-mode="glow" aria-pressed="true">Glow</button>
+      <button type="button" data-mode="contrast" aria-pressed="false">Contrast</button>
+      <select aria-label="Particle count">
+        <option value="300">300</option>
+        <option value="700" selected>700</option>
+        <option value="1200">1200</option>
+      </select>
+      <select aria-label="Text path">
+        <option value="border" selected>Border</option>
+        <option value="offset">Offset</option>
+        <option value="shadow">Shadow</option>
+      </select>
+      <select aria-label="Running text" title="What the swarm does with running text">
+        <option value="avoid" selected>Text: avoid</option>
+        <option value="highlight">Text: highlight</option>
+        <option value="behind">Text: behind</option>
+        <option value="over">Text: over</option>
+      </select>
+      <input type="color" value="#ffd36e" aria-label="Swarm colour">
+      <button type="button" id="tune-btn" aria-expanded="false" aria-controls="tune">Tune</button>
+    </div>
+    <div class="tune" id="tune" role="group" aria-label="Tune the swarm" hidden>
+      <div id="sliders"></div>
+      <div class="test">
+        <button type="button" id="reset">Reset</button>
+        <button type="button" id="copy">Copy settings</button>
+      </div>
+      <pre class="readout" id="readout" aria-live="off"></pre>
+    </div>
+  </div>
+
+  <script src="swarm.js"></script>
+  <script>
+    const swarm = createSwarm({ count: 700 });
+    const DEFAULTS = swarm.get();
+    const modeBtns = document.querySelectorAll('[data-mode]');
+    const showMode = m => modeBtns.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.mode === m)));
+    modeBtns.forEach(b => b.addEventListener('click', () => { swarm.setMode(b.dataset.mode); showMode(b.dataset.mode); render(); }));
+    const countSel = document.querySelector('.controls select');
+    countSel.addEventListener('change', e => { swarm.setCount(+e.target.value); sliders.count.sync(+e.target.value); render(); });
+    const pathSel = document.querySelector('[aria-label="Text path"]');
+    pathSel.addEventListener('change', e => { swarm.setPath(e.target.value); render(); });
+    const proseSel = document.querySelector('[aria-label="Running text"]');
+    proseSel.addEventListener('change', e => { swarm.setProse(e.target.value); render(); });
+    const colorIn = document.querySelector('.controls input[type=color]');
+    const showColor = c => { colorIn.value = c; document.getElementById('term').style.setProperty('--accent', c); };
+    colorIn.addEventListener('input', e => { swarm.setColor(e.target.value); showColor(e.target.value); render(); });
+
+    // The play button toggles to pause on click (the swarm redraws the icon); keep its label true.
+    const play = document.querySelector('[data-swarm-shape="play"]');
+    play.addEventListener('click', () => play.setAttribute('aria-label', play.dataset.swarmDesign === '1' ? 'Pause' : 'Play'));
+
+    // Tune panel: [option, label, min, max, step]. Defaults come from the swarm itself.
+    const TUNE = [
+      ['count', 'Count', 100, 2000, 50], ['spacing', 'Hive radius', 8, 80, 1], ['size', 'Size', 0.3, 3, 0.1],
+      ['orbit', 'Orbit speed', 0, 4, 0.1], ['stiffness', 'Stiffness', 0.2, 3, 0.1], ['scouts', 'Scout ratio', 0, 0.5, 0.01],
+      ['field', 'Pull radius', 20, 300, 5], ['pathSpeed', 'Path speed', 10, 400, 5], ['curve', 'Share curve', 0.5, 4, 0.1],
+      ['glow', 'Glow', 0, 3, 0.1], ['infoDelay', 'Info delay s', 0, 2, 0.1],
+    ];
+    const tune = document.getElementById('tune'), sliders = {};
+    TUNE.forEach(([key, label, min, max, step]) => {
+      const l = document.createElement('label');
+      l.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
+      const input = l.children[1], out = l.children[2];
+      const sync = v => { input.value = v; out.textContent = +(+v).toFixed(2); };
+      input.addEventListener('input', () => {
+        swarm.set({ [key]: +input.value }); sync(input.value);
+        if (key === 'count') countSel.value = input.value;       // blank when it matches no option
+        render();
+      });
+      sync(DEFAULTS[key]);
+      sliders[key] = { sync };
+      document.getElementById('sliders').appendChild(l);
+    });
+
+    // Test tools: the readout is the exact call that rebuilds what you see; Copy puts it on the clipboard.
+    const KEYS = ['mode', 'color', 'textPath', 'prose', ...TUNE.map(t => t[0])];
+    const readout = document.getElementById('readout');
+    function config() {
+      const cur = swarm.get(), out = {};
+      KEYS.forEach(k => { out[k] = typeof cur[k] === 'number' ? +cur[k].toFixed(3) : cur[k]; });
+      return `createSwarm(${JSON.stringify(out, null, 1).replace(/\n\s*/g, ' ')})`;
+    }
+    function render() { readout.textContent = config(); }
+    render();
+    const startAccent = colorIn.value;
+    document.getElementById('reset').addEventListener('click', () => {
+      const d = {};
+      KEYS.forEach(k => { d[k] = DEFAULTS[k]; });
+      swarm.set(d);
+      // setColor paints every target; give each one back its own --swarm-color from the CSS.
+      document.querySelectorAll('[data-swarm], [data-swarm-prose]').forEach(el => el.style.removeProperty('--swarm-color'));
+      swarm.refresh();
+      TUNE.forEach(([k]) => sliders[k].sync(DEFAULTS[k]));
+      countSel.value = DEFAULTS.count; pathSel.value = DEFAULTS.textPath; proseSel.value = DEFAULTS.prose;
+      showMode(DEFAULTS.mode); showColor(startAccent); render();
+    });
+    const copyBtn = document.getElementById('copy');
+    copyBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(config()); copyBtn.textContent = 'Copied'; }
+      catch { getSelection().selectAllChildren(readout); copyBtn.textContent = 'Selected: press ⌘C'; }
+      setTimeout(() => { copyBtn.textContent = 'Copy settings'; }, 1600);
+    });
+    const tuneBtn = document.getElementById('tune-btn');
+    tuneBtn.addEventListener('click', () => {
+      tune.hidden = !tune.hidden;
+      tuneBtn.setAttribute('aria-expanded', String(!tune.hidden));
+      tuneBtn.setAttribute('aria-pressed', String(!tune.hidden));
+      keepOnScreen();
+    });
+
+    // Drag the terminal by its title bar; keep it on screen and remember where it was left.
+    const term = document.getElementById('term'), bar = term.querySelector('.term-bar');
+    function place(x, y) {
+      x = Math.min(Math.max(0, x), innerWidth - term.offsetWidth);
+      y = Math.min(Math.max(0, y), Math.max(0, innerHeight - term.offsetHeight));
+      Object.assign(term.style, { left: x + 'px', top: y + 'px', bottom: 'auto' });
+    }
+    function keepOnScreen() { const r = term.getBoundingClientRect(); place(r.left, r.top); }
+    try { const p = JSON.parse(localStorage.getItem('swarm-term')); if (p) place(p[0], p[1]); } catch {}
+    bar.addEventListener('pointerdown', e => {
+      const r = term.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      bar.setPointerCapture(e.pointerId);
+      const move = ev => place(ev.clientX - dx, ev.clientY - dy);
+      bar.addEventListener('pointermove', move);
+      bar.addEventListener('pointerup', () => {
+        bar.removeEventListener('pointermove', move);
+        const end = term.getBoundingClientRect();
+        try { localStorage.setItem('swarm-term', JSON.stringify([end.left, end.top])); } catch {}
+      }, { once: true });
+    });
+    addEventListener('resize', keepOnScreen);
+  </script>
+</body>
+</html>
