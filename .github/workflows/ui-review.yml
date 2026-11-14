@@ -1,0 +1,11 @@
+name: UI review
+on:
+  pull_request: { types: [labeled] }
+  issue_comment: { types: [created] }
+jobs:
+  review:
+    uses: DNP42/.github/.github/workflows/ui-review.yml@main
+    with:
+      app-id: ${{ vars.DNPCLAUDE_APP_ID || '5756777' }}
+      agent-log-issue: ${{ vars.AGENT_LOG_ISSUE || '' }}
+    secrets: inherit
